@@ -85,8 +85,9 @@ export function ScriptPanel({ pid, script, setScript, seekTo, busy, setStatus })
               )}
               <button className="mini" onClick={(e) => { e.stopPropagation(); addLine(i); }} title="Add line after">＋</button>
               <button className="mini" onClick={(e) => { e.stopPropagation(); addScene(i); }} title="Add scene after">▤</button>
-              {s.type === "added" && (
-                <button className="mini" onClick={(e) => { e.stopPropagation(); del(i); }} title="Remove">×</button>
+              {(s.type === "added" || s.start != null) && (
+                <button className="mini" title={s.type === "added" ? "Remove" : "Cut this line and its footage from the video"}
+                        onClick={(e) => { e.stopPropagation(); del(i); }}>×</button>
               )}
             </div>
             <textarea
@@ -95,6 +96,16 @@ export function ScriptPanel({ pid, script, setScript, seekTo, busy, setStatus })
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => upd(i, { en: e.target.value })}
             />
+            {s.start != null && s.end != null && (
+              // trim the raw footage this line uses; the timeline ripples on export
+              <div className="row gap" onClick={(e) => e.stopPropagation()}>
+                <label className="lab">Footage in <input className="num" type="number" step="0.1" min="0"
+                       value={s.start} onChange={(e) => upd(i, { start: +e.target.value })} /></label>
+                <label className="lab">out <input className="num" type="number" step="0.1"
+                       value={s.end} onChange={(e) => upd(i, { end: Math.max(+e.target.value, (+s.start || 0) + 0.2) })} /></label>
+                <span className="tc">{Math.max(0.2, (s.end - s.start)).toFixed(1)}s</span>
+              </div>
+            )}
           </div>
         )
       )}
