@@ -1,5 +1,5 @@
-import React, { useRef } from "react";
-import { api } from "../api.js";
+import React, { useEffect, useRef, useState } from "react";
+import { api, post } from "../api.js";
 
 const SEL = (label, value, onChange, opts) => (
   <label className="lab col" key={label}>
@@ -15,7 +15,36 @@ const SEL = (label, value, onChange, opts) => (
 export function StylePanel({ pid, cfg, setCfg }) {
   const logoRef = useRef(null);
   const bgRef = useRef(null);
+  const [brandList, setBrandList] = useState([]);
+  const [brandSel, setBrandSel] = useState("");
   const u = (patch) => setCfg({ ...cfg, ...patch });
+
+  const loadBrands = () => api("/api/brands").then((r) => setBrandList(r.brands || [])).catch(() => {});
+  useEffect(() => { loadBrands(); }, []);
+  useEffect(() => { setBrandSel(cfg.brand_id || ""); }, [cfg.brand_id]);
+
+  const applyBrand = async (bid) => {
+    setBrandSel(bid);
+    if (!bid) return;
+    try {
+      const fresh = await api(`/api/projects/${pid}/apply-brand/${bid}`, { method: "POST" });
+      setCfg(fresh);   // brand merge happens server-side; take its result verbatim
+    } catch {}
+  };
+  const saveAsBrand = async () => {
+    const name = window.prompt("Save current style as a brand — name:");
+    if (!name) return;
+    try {
+      // style keys live in local state; persist before snapshotting
+      await fetch(`/api/projects/${pid}/config`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg),
+      });
+      await fetch(`/api/brands/from-project/${pid}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+      });
+      await loadBrands();
+    } catch {}
+  };
 
   // server-side uploads change ONE key — merge just that key back so
   // unsaved local edits are never clobbered
@@ -39,6 +68,18 @@ export function StylePanel({ pid, cfg, setCfg }) {
 
   return (
     <div className="panel-body">
+      <span className="eyebrow">Brand kit</span>
+      <div className="row gap">
+        <select value={brandSel} onChange={(e) => applyBrand(e.target.value)} style={{ flex: 1 }}>
+          <option value="">— pick a brand to apply —</option>
+          {brandList.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+        <button className="btn sm ghost" title="Save this project's colors, logo, cards, voice and music as a reusable brand"
+                onClick={saveAsBrand}>＋ Save as brand</button>
+      </div>
+      <p className="hint">A brand applies colors, logo, cards, frame, voice and music in one click — set once, reuse on every video.</p>
+
+      <hr className="sep" />
       <span className="eyebrow">Intro / outro cards</span>
       <label className="lab col">Intro title
         <input value={cfg.title || ""} onChange={(e) => u({ title: e.target.value })} /></label>

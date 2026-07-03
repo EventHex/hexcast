@@ -20,6 +20,7 @@ PROJECTS = os.environ.get("REMASTER_DATA_DIR") or os.path.join(ROOT, "projects")
 os.makedirs(PROJECTS, exist_ok=True)
 sys.path.insert(0, os.path.join(ROOT, "pipeline"))
 import config as cfgmod
+import brands as brandsmod
 from providers import settings as settingsmod
 
 app = FastAPI(title="Remaster")
@@ -31,6 +32,7 @@ def _reap_orphans():
     processes that keep writing into project files. Reap them on boot."""
     subprocess.run(["pkill", "-f", r"pipeline/(build_revoice|polish_export|transcribe)\.py"],
                    capture_output=True)
+    brandsmod.seed_default(PROJECTS, os.path.join(HERE, "assets"))
 # Allow the Chrome extension (chrome-extension://) to hand recordings straight in.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/assets", StaticFiles(directory=os.path.join(HERE, "assets")), name="assets")
@@ -465,6 +467,52 @@ def render(pid: str):
         ("Re-render from edited script", ["pipeline/build_revoice.py", "{REL}", "--from-script"]),
         ("Frame + export", ["pipeline/polish_export.py", "{REL}"]),
     ])
+
+
+@app.get("/api/brands")
+def brands_list():
+    return {"brands": brandsmod.list_brands(PROJECTS)}
+
+
+@app.post("/api/brands")
+def brands_create(body: dict = Body(...)):
+    bid = brandsmod.create_brand(PROJECTS, body.get("name"), body.get("config"))
+    return {"id": bid}
+
+
+@app.put("/api/brands/{bid}")
+def brands_update(bid: str, body: dict = Body(...)):
+    try:
+        cur = brandsmod.get_brand(PROJECTS, bid)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404, "no such brand")
+    cfg = {**(cur.get("config") or {}), **(body.get("config") or {})}
+    return brandsmod.save_brand(PROJECTS, bid, body.get("name") or cur.get("name"), cfg)
+
+
+@app.delete("/api/brands/{bid}")
+def brands_delete(bid: str):
+    try:
+        brandsmod.delete_brand(PROJECTS, bid)
+    except ValueError:
+        raise HTTPException(400, "bad brand id")
+    return {"ok": True}
+
+
+@app.post("/api/projects/{pid}/apply-brand/{bid}")
+def apply_brand(pid: str, bid: str):
+    d = proj_dir(pid)
+    try:
+        return brandsmod.apply_to_project(PROJECTS, bid, d, cfgmod)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404, "no such brand")
+
+
+@app.post("/api/brands/from-project/{pid}")
+def brand_from_project(pid: str, body: dict = Body(...)):
+    d = proj_dir(pid)
+    bid = brandsmod.from_project(PROJECTS, body.get("name") or "My brand", d, cfgmod)
+    return {"id": bid}
 
 
 @app.get("/api/voices")
