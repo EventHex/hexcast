@@ -133,10 +133,24 @@ def _resolve(d):
     return d
 
 
+def _vision_chain():
+    """Engines to try, in order. REMASTER_VISION_PROVIDER pins one; 'none'
+    turns AI targeting off (recorded clicks only); 'auto' = every configured."""
+    p = (os.environ.get("REMASTER_VISION_PROVIDER") or "auto").lower()
+    if p == "none":
+        return []
+    if p == "cerebras":
+        return ["cerebras"]
+    if p == "gemini":
+        return ["gemini"]
+    return [e for e, key in (("cerebras", CK), ("gemini", GEM)) if key]
+
+
 def decide(raw, segs, en, proj, precomputed=None):
     """precomputed: optional list aligned to segs; a non-None entry (e.g. a
     click-derived target from events_zoom) is used as-is and skips the AI call."""
     os.makedirs(f"{proj}/zoomframes", exist_ok=True)
+    chain = _vision_chain()
     out, engine = [], None
     for i, s in enumerate(segs):
         if precomputed and i < len(precomputed) and precomputed[i] is not None:
@@ -146,6 +160,8 @@ def decide(raw, segs, en, proj, precomputed=None):
         text = (en[i] if i < len(en) else "") or ""
         if not text:
             out.append({"zoom": False, "reason": "empty"}); continue
+        if not chain:
+            out.append({"zoom": False, "reason": "ai-off"}); continue
         mid = (s["start"] + s["end"]) / 2.0
         raw_fp = f"{proj}/zoomframes/f_{i}.jpg"
         grid_fp = f"{proj}/zoomframes/f_{i}_grid.jpg"
@@ -155,11 +171,12 @@ def decide(raw, segs, en, proj, precomputed=None):
         except Exception:
             grid_fp = raw_fp
         b = base64.b64encode(open(grid_fp, "rb").read()).decode()
-        try:
-            d = _cerebras_vision(b, text); engine = engine or "cerebras"
-        except Exception:
+        d = {"zoom": False, "reason": "no engine"}
+        for eng in chain:
             try:
-                d = _gemini_vision(b, text); engine = "gemini"
+                d = _cerebras_vision(b, text) if eng == "cerebras" else _gemini_vision(b, text)
+                engine = engine or eng
+                break
             except Exception as e:
                 d = {"zoom": False, "reason": "err:" + str(e)[:50]}
         if d.get("zoom"):

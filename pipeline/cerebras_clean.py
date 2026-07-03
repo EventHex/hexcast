@@ -124,6 +124,59 @@ def _call_cerebras(messages: list, max_tokens: int = 1024) -> dict:
     return resp.json()
 
 
+def _call_openai(messages: list, max_tokens: int = 1024) -> dict:
+    """Call any OpenAI-compatible /chat/completions endpoint (OpenAI, Ollama,
+    OpenRouter, LM Studio…). Base URL/model come from OPENAI_BASE_URL /
+    REMASTER_LLM_MODEL; a key is optional (local endpoints don't need one)."""
+    load_env()
+    import os
+    base = (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+    model = os.environ.get("REMASTER_LLM_MODEL") or "gpt-4o-mini"
+    headers = {"Content-Type": "application/json"}
+    if os.environ.get("OPENAI_API_KEY"):
+        headers["Authorization"] = "Bearer " + os.environ["OPENAI_API_KEY"]
+    resp = requests.post(f"{base}/chat/completions", headers=headers,
+                         json={"model": model, "messages": messages,
+                               "max_tokens": max_tokens, "temperature": 0.2},
+                         timeout=90)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _provider_chain() -> list:
+    """Engines to try, in order. Explicit REMASTER_LLM_PROVIDER pins one;
+    'none' turns AI cleanup off; 'auto' = every configured provider."""
+    load_env()
+    import os
+    p = (os.environ.get("REMASTER_LLM_PROVIDER") or "auto").lower()
+    if p == "none":
+        return []
+    if p in ("cerebras", "gemini", "openai"):
+        return [p]
+    chain = []
+    if os.environ.get("CEREBRAS_API_KEY"):
+        chain.append("cerebras")
+    if os.environ.get("GEMINI_API_KEY"):
+        chain.append("gemini")
+    if os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_BASE_URL"):
+        chain.append("openai")
+    return chain
+
+
+def _engine_json(engine: str, prompt: str, messages: list, max_tokens: int) -> dict:
+    """Run one engine, return its parsed JSON output. Raises on any failure."""
+    if engine == "cerebras":
+        body = _call_cerebras(messages, max_tokens)
+        raw = body["choices"][0]["message"]["content"]
+    elif engine == "openai":
+        body = _call_openai(messages, max_tokens)
+        raw = body["choices"][0]["message"]["content"]
+    else:
+        body = _call_gemini(prompt, max_tokens)
+        raw = body["candidates"][0]["content"]["parts"][0]["text"]
+    return json.loads(_strip_fences(raw))
+
+
 def _call_gemini(prompt: str, max_tokens: int = 1024) -> dict:
     """Call Gemini generateContent.  Returns parsed response dict."""
     load_env()
@@ -180,47 +233,28 @@ def clean_translate(
     if not segments:
         raise ValueError("segments list is empty")
 
+    chain = _provider_chain()
+    if not chain:
+        # AI cleanup off (or no keys): identity passthrough — keep the words as spoken
+        return {"engine": "none",
+                "segments": [{"start": s["start"], "end": s["end"],
+                              "original": s.get("text", ""),
+                              "clean": (s.get("text") or "").strip()} for s in segments]}
+
     glossary = glossary or []
     prompt = _build_prompt(segments, glossary, target_lang)
     messages = [{"role": "user", "content": prompt}]
 
-    # ----- Try Cerebras -----
-    cerebras_result = None
-    cerebras_error = None
-
-    try:
-        body = _call_cerebras(messages, max_tokens=1024)
-        raw = body["choices"][0]["message"]["content"]
-        raw = _strip_fences(raw)
-        cerebras_result = json.loads(raw)
-    except Exception as exc:  # noqa: BLE001  (intentionally broad for fallback)
-        cerebras_error = exc
-
-    if cerebras_result is not None and "segments" in cerebras_result:
-        cleaned = cerebras_result["segments"]
-        return {
-            "engine": "cerebras",
-            "segments": _merge(segments, cleaned),
-        }
-
-    # ----- Fall back to Gemini -----
-    try:
-        body = _call_gemini(prompt, max_tokens=1024)
-        raw = body["candidates"][0]["content"]["parts"][0]["text"]
-        raw = _strip_fences(raw)
-        gemini_result = json.loads(raw)
-    except (KeyError, IndexError) as exc:
-        raise ValueError(f"Unexpected Gemini response shape: {body}") from exc
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Gemini returned non-JSON: {raw[:500]}") from exc
-
-    if "segments" not in gemini_result or not isinstance(gemini_result["segments"], list):
-        raise ValueError(f"Gemini response missing 'segments' list: {gemini_result}")
-
-    return {
-        "engine": "gemini",
-        "segments": _merge(segments, gemini_result["segments"]),
-    }
+    last: Exception | None = None
+    for engine in chain:
+        try:
+            out = _engine_json(engine, prompt, messages, 1024)
+            if isinstance(out, dict) and isinstance(out.get("segments"), list):
+                return {"engine": engine, "segments": _merge(segments, out["segments"])}
+            last = ValueError(f"{engine} response missing 'segments' list")
+        except Exception as exc:  # noqa: BLE001  (fall through the chain)
+            last = exc
+    raise ValueError(f"clean_translate failed on all providers ({', '.join(chain)}): {last}")
 
 
 # ---------------------------------------------------------------------------
@@ -263,15 +297,14 @@ def rewrite_lines(lines: list, glossary: Optional[list] = None, style: str = "co
         '\nReturn ONLY strict JSON: {"lines":["rewrite 0","rewrite 1", ...]}\n\nLines:\n' + numbered
     )
     out = None
-    try:
-        body = _call_cerebras([{"role": "user", "content": prompt}], max_tokens=1500)
-        out = json.loads(_strip_fences(body["choices"][0]["message"]["content"]))
-    except Exception:
+    for engine in _provider_chain():
         try:
-            body = _call_gemini(prompt, max_tokens=1500)
-            out = json.loads(body["candidates"][0]["content"]["parts"][0]["text"])
+            out = _engine_json(engine, prompt, [{"role": "user", "content": prompt}], 1500)
+            break
         except Exception:
-            return list(lines)
+            continue
+    if out is None:
+        return list(lines)
     res = out.get("lines") if isinstance(out, dict) else out
     if not isinstance(res, list) or len(res) != len(lines):
         return list(lines)

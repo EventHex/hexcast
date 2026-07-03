@@ -325,8 +325,9 @@ def _sigs(cfg, script):
       frame  -> theme plate / background / shadow / logo framing
     """
     segs = script.get("segments") or []
+    tts_provider = settingsmod.provider_env(PROJECTS).get("REMASTER_TTS_PROVIDER", "auto")
     return {
-        "voiced": _sig(cfg.get("voice"), cfg.get("lang"), cfg.get("original_voice"),
+        "voiced": _sig(cfg.get("voice"), cfg.get("lang"), cfg.get("original_voice"), tts_provider,
                        [s.get("en") for s in segs], [s.get("type") for s in segs],
                        [(s.get("start"), s.get("end"), s.get("dur"), s.get("anchor")) for s in segs]),
         "cards": _sig(cfg.get("title"), cfg.get("subtitle"), cfg.get("outro_title"),
@@ -464,6 +465,17 @@ def render(pid: str):
         ("Re-render from edited script", ["pipeline/build_revoice.py", "{REL}", "--from-script"]),
         ("Frame + export", ["pipeline/polish_export.py", "{REL}"]),
     ])
+
+
+@app.get("/api/voices")
+def voices(provider: str = "elevenlabs"):
+    """Live voice list for pickable TTS providers (id, name, preview_url)."""
+    os.environ.update(settingsmod.provider_env(PROJECTS))
+    from providers import tts as ttsmod
+    try:
+        return {"voices": ttsmod.list_voices(provider)}
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/settings")

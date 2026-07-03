@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root: tools.* imports
 from PIL import Image, ImageDraw, ImageFont
-from tools.audio.google_tts import GoogleTTS
+from providers.tts import synth as tts_synth, resolve_provider as tts_provider
 import config as _cfgdef
 
 PROJ = sys.argv[1] if len(sys.argv) > 1 else "projects/demo-revoice-test"
@@ -252,6 +252,14 @@ def main():
     MUSIC = cfg.get("music"); MUSIC_GAIN = cfg.get("music_gain", config.DEFAULTS["music_gain"])
     CARD_STYLE = cfg.get("card_style") or "gradient"
     ORIGINAL_VOICE = bool(cfg.get("original_voice", False))
+    # BYOK: which TTS backend voices this render. 'original' (the zero-key
+    # default) means keep the recorded audio — same path as original_voice.
+    TTS_PROVIDER = tts_provider()
+    if TTS_PROVIDER == "original":
+        ORIGINAL_VOICE = True
+    # cache/signature key: switching provider must invalidate voiced audio,
+    # but google keys stay bare so existing caches survive
+    VOICE_KEY = VOICE if TTS_PROVIDER == "google" else f"{TTS_PROVIDER}:{VOICE}"
     TRANSITION = cfg.get("transition", "none") or "none"
     LANG = cfg.get("lang", "English") or "English"
     if "--voice" in sys.argv:
@@ -364,8 +372,6 @@ def main():
     # them), so an unchanged line is a cache hit and a one-word edit re-renders
     # only its own segment.
     os.makedirs(f"{PROJ}/seg", exist_ok=True)
-    tts = GoogleTTS()
-    lang = "-".join(VOICE.split("-")[:2])  # en-IN-Chirp3-HD-Aoede -> en-IN
     raw_sig = f"{os.path.getmtime(RAW):.0f}" if os.path.exists(RAW) else "0"
 
     def _needs_tts(sg):
@@ -373,7 +379,7 @@ def main():
         return bool(sg.get("en")) and (typ == "added" or (typ == "clip" and not ORIGINAL_VOICE))
 
     def _tts_path(sg):
-        return f"{PROJ}/seg/tts_{_h(sg['en'], VOICE)}.mp3"
+        return f"{PROJ}/seg/tts_{_h(sg['en'], VOICE_KEY)}.mp3"
 
     def _gen_tts(k):
         """Returns None on success/cache-hit, error string on failure."""
@@ -386,8 +392,7 @@ def main():
         last = "no output"
         for attempt in range(3):
             try:
-                tts.execute({"text": sg["en"], "voice": VOICE, "language_code": lang,
-                             "output_path": mp3})
+                tts_synth(sg["en"], VOICE, mp3, provider=TTS_PROVIDER)
                 if os.path.exists(mp3) and os.path.getsize(mp3) > 0:
                     return None
             except Exception as e:
@@ -520,7 +525,7 @@ def main():
     json.dump({"voice": VOICE, "title": TITLE, "lang": LANG, "segments": timeline,
                "zooms": (ZOOMS_SAVED if (ZOOMS_EDITED and ZOOMS_SAVED) else _derive_zooms(timeline)),
                "zoomsEdited": ZOOMS_EDITED, "elements": ELEMENTS_SAVED, "sounds": SOUNDS_SAVED,
-               "voiced_sig": config.voiced_sig(timeline, VOICE)},
+               "voiced_sig": config.voiced_sig(timeline, VOICE_KEY)},
               open(f"{PROJ}/script.json", "w"), indent=1, ensure_ascii=False)
     print(f"\nDONE: {PROJ}/revoiced.mp4  ({dur(PROJ + '/revoiced.mp4'):.1f}s, {len(parts)} clips)")
 

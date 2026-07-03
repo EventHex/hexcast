@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api, post } from "../api.js";
+import { api, jput, post } from "../api.js";
 
 export const LANGS = [
   { n: "English (India)", t: "English", v: "en-IN-Chirp3-HD-Aoede" },
@@ -50,12 +50,26 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked 
   const [tracks, setTracks] = useState([]);
   const [sfxLib, setSfxLib] = useState([]);
   const [playing, setPlaying] = useState(null);
+  const [tts, setTts] = useState("auto");        // provider selection (settings-level)
+  const [keysSet, setKeysSet] = useState({});    // {google:{set}, elevenlabs:{set}, ...}
+  const [elVoices, setElVoices] = useState([]);  // live ElevenLabs voice list
   const audioRef = useRef(null);
   const fileRef = useRef(null);
   useEffect(() => {
     api("/api/music").then((r) => setTracks(r.tracks || [])).catch(() => {});
     api("/api/sfx").then((r) => setSfxLib(r.sfx || [])).catch(() => {});
+    api("/api/settings").then((v) => { setTts(v.tts.provider || "auto"); setKeysSet(v.keys || {}); }).catch(() => {});
   }, []);
+  // provider is a settings-level choice (applies to every project)
+  const effTts = tts === "auto" ? (keysSet.google?.set ? "google" : "original") : tts;
+  useEffect(() => {
+    if (effTts === "elevenlabs" && keysSet.elevenlabs?.set)
+      api("/api/voices?provider=elevenlabs").then((r) => setElVoices(r.voices || [])).catch(() => setElVoices([]));
+  }, [effTts, keysSet]);
+  const setProvider = async (v) => {
+    setTts(v);
+    try { await jput("/api/settings", { tts: { provider: v } }); } catch {}
+  };
 
   const u = (patch) => setCfg({ ...cfg, ...patch });
   const lang = cfg.lang || "English";
@@ -133,12 +147,21 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked 
       <audio ref={audioRef} hidden />
       <input ref={fileRef} type="file" accept="audio/*" hidden onChange={uploadMusic} />
       <span className="eyebrow">AI voice</span>
+      <label className="lab col">Voice provider
+        <select value={tts} onChange={(e) => setProvider(e.target.value)}>
+          <option value="auto">Auto ({keysSet.google?.set ? "Google" : "original voice"})</option>
+          <option value="google">Google Chirp3-HD</option>
+          <option value="elevenlabs">ElevenLabs</option>
+          <option value="piper">Piper — local, free</option>
+          <option value="original">My original recorded voice</option>
+        </select>
+      </label>
       <label className="lab col">Language
         <select value={langName} onChange={(e) => setLang(e.target.value)}>
           {LANGS.map((x) => <option key={x.n}>{x.n}</option>)}
         </select>
       </label>
-      {lang === "English" && (
+      {effTts === "google" && lang === "English" && (
         <label className="lab col">Narration voice
           <div className="row gap">
             <select value={cfg.voice || ALL_EN[0]} onChange={(e) => u({ voice: e.target.value })}>
@@ -154,6 +177,38 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked 
             </button>
           </div>
         </label>
+      )}
+      {effTts === "elevenlabs" && (
+        keysSet.elevenlabs?.set ? (
+          <label className="lab col">Narration voice
+            <div className="row gap">
+              <select value={cfg.voice || ""} onChange={(e) => u({ voice: e.target.value })}>
+                <option value="">Default (Rachel)</option>
+                {elVoices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+              {(() => {
+                const pv = elVoices.find((v) => v.id === cfg.voice)?.preview_url;
+                return pv ? (
+                  <button className="mini wideh" title="Preview voice" onClick={() => preview(pv)}>
+                    {playing === pv ? "⏹" : "▶"}
+                  </button>
+                ) : null;
+              })()}
+            </div>
+          </label>
+        ) : (
+          <p className="hint">Add your ElevenLabs key in ⚙ Settings to list your voices.</p>
+        )
+      )}
+      {effTts === "piper" && (
+        <label className="lab col">Piper voice model
+          <input value={String(cfg.voice || "").includes("Chirp") ? "" : cfg.voice || ""}
+                 placeholder="en_US-lessac-medium"
+                 onChange={(e) => u({ voice: e.target.value })} />
+        </label>
+      )}
+      {effTts === "original" && (
+        <p className="hint">Exports keep your recorded narration as-is — no revoicing.</p>
       )}
       <label className="chk"><input type="checkbox" checked={!!cfg.original_voice}
              onChange={(e) => u({ original_voice: e.target.checked })} /> Use my original recorded voice</label>
