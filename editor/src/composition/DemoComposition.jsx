@@ -48,9 +48,18 @@ function captionAt(t, segments) {
   return null;
 }
 
+// parity with pipeline/fonts.py ids -> the @font-face families in styles.css
+const FONT_FAMILY = {
+  "inter": "'Inter', sans-serif",
+  "space-grotesk": "'Space Grotesk', sans-serif",
+  "playfair-display": "'Playfair Display', serif",
+  "jetbrains-mono": "'JetBrains Mono', monospace",
+};
+const fam = (cfg) => FONT_FAMILY[cfg.font] || "-apple-system, Helvetica, sans-serif";
+
+// element defaults mirror timeline_fx.py (#FF6B57, 8px outline ≈ 0.4% border)
 const ELT_STYLE = {
-  box: { border: "3px solid #34d8c9" },
-  redact: { background: "#0a0f1c" },
+  redact: { background: "#000" },
   blur: { backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" },
   text: {},
   image: {},
@@ -106,8 +115,10 @@ function windowRect(cfg, theme, CW, CH, ar) {
 
 function logoSrc(cfg, pid) {
   if (!cfg.logo) return null;
-  const base = String(cfg.logo).split("/").pop();
-  return String(cfg.logo).includes("webstudio/assets") ? `/assets/${base}` : `/media/${pid}/${base}`;
+  const p = String(cfg.logo);
+  const base = p.split("/").pop();
+  // repo-level default assets are served at /assets; project uploads at /media
+  return p.includes("/projects/") ? `/media/${pid}/${base}` : `/assets/${base}`;
 }
 
 export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, srcDur }) => {
@@ -132,13 +143,20 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
   const outroF = Math.round(T.outroDur * fps);
   const cardTop = cfg.card_top || cfg.brand_top || "#005DBC";
   const cardBot = cfg.card_bottom || cfg.brand_bottom || "#081428";
+  const family = fam(cfg);
+  const capScale = +(cfg.cap_scale || 1);
+  const capColor = cfg.cap_color || "#fff";
+  const capBoxed = (cfg.cap_bg || "box") !== "none";
+  const capOp = cfg.cap_bg_opacity != null ? +cfg.cap_bg_opacity : 0.58;
+  const cardProps = { style: cfg.card_style, top: cardTop, bot: cardBot, logo, height: winH,
+                      align: cfg.card_align || null, titleColor: cfg.card_title_color || null,
+                      subColor: cfg.card_sub_color || null, scale: +(cfg.card_scale || 1), fontFamily: family };
 
   const windowContent = (
     <>
       {introF > 0 && (
         <Sequence from={0} durationInFrames={introF}>
-          <CardPreview style={cfg.card_style} top={cardTop} bot={cardBot}
-                       title={cfg.title} subtitle={cfg.subtitle} logo={logo} height={winH} />
+          <CardPreview {...cardProps} title={cfg.title} subtitle={cfg.subtitle} />
         </Sequence>
       )}
       <Sequence from={introF} durationInFrames={contentF}>
@@ -150,17 +168,19 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
         </AbsoluteFill>
         {(script.elements || []).map((el, i) => {
           if (el.start != null && el.end != null && el.end > el.start && (tB < el.start || tB > el.end)) return null;
+          const col = el.color || "#FF6B57";
           return (
             <div key={i}
               style={{
                 position: "absolute", left: `${el.x * 100}%`, top: `${el.y * 100}%`,
                 width: `${el.w * 100}%`, height: `${el.h * 100}%`, borderRadius: 4,
                 display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-                ...(ELT_STYLE[el.type] || ELT_STYLE.box),
+                ...(el.type === "box" ? { border: `${Math.max(2, winH * 0.008)}px solid ${col}` }
+                   : ELT_STYLE[el.type] || {}),
               }}>
               {el.type === "text" && (
-                <span style={{ color: "#fff", background: "rgba(0,0,0,.55)", padding: "0.3em 0.6em",
-                               borderRadius: 6, font: `600 ${capSize}px -apple-system, sans-serif`, textAlign: "center" }}>
+                <span style={{ color: col, textAlign: "center",
+                               font: `600 ${(el.size || 0.045) * winH}px ${family}` }}>
                   {el.text || ""}
                 </span>
               )}
@@ -172,11 +192,13 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
           );
         })}
         {cap && (
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: "5.5%",
+          <div style={{ position: "absolute", left: 0, right: 0,
+                        ...(cfg.cap_pos === "top" ? { top: "5.5%" } : { bottom: "5.5%" }),
                         display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-            <span style={{ maxWidth: "82%", background: "rgba(0,0,0,.5)", color: "#fff",
-                           padding: `${capSize * 0.4}px ${capSize * 0.6}px`,
-                           font: `500 ${capSize}px -apple-system, 'Arial', sans-serif`,
+            <span style={{ maxWidth: "82%", color: capColor,
+                           background: capBoxed ? `rgba(0,0,0,${capOp})` : "none",
+                           padding: capBoxed ? `${capSize * capScale * 0.4}px ${capSize * capScale * 0.6}px` : 0,
+                           font: `500 ${capSize * capScale}px ${family}`,
                            lineHeight: 1.35, borderRadius: 4, textAlign: "center" }}>
               {cap}
             </span>
@@ -185,8 +207,7 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
       </Sequence>
       {outroF > 0 && (
         <Sequence from={introF + contentF} durationInFrames={outroF}>
-          <CardPreview style={cfg.card_style} top={cardTop} bot={cardBot}
-                       title={cfg.outro_title} subtitle={cfg.outro_subtitle} logo={logo} height={winH} />
+          <CardPreview {...cardProps} title={cfg.outro_title} subtitle={cfg.outro_subtitle} />
         </Sequence>
       )}
     </>
@@ -233,11 +254,11 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
                       display: "flex", flexDirection: "column", justifyContent: "center", gap: CH * 0.02 }}>
           {logo && <img src={logo} style={{ width: "62%", maxHeight: CH * 0.12, objectFit: "contain",
                                             objectPosition: "left" }} />}
-          <div style={{ color: "#fff", font: `700 ${CH * 0.055}px -apple-system, sans-serif`, lineHeight: 1.2 }}>
+          <div style={{ color: "#fff", font: `700 ${CH * 0.055}px ${family}`, lineHeight: 1.2 }}>
             {cfg.title || ""}
           </div>
           <div style={{ width: "26%", height: Math.max(3, CH / 200), background: "#7fb2ff" }} />
-          <div style={{ color: "#becde1", font: `400 ${CH * 0.026}px -apple-system, sans-serif` }}>
+          <div style={{ color: "#becde1", font: `400 ${CH * 0.026}px ${family}` }}>
             {cfg.subtitle || ""}
           </div>
         </div>

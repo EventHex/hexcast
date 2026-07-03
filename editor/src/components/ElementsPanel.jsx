@@ -61,7 +61,18 @@ export function ElementsPanel({ pid, script, setScript, drawMode, setDrawMode, p
                    onChange={(e) => upd(i, { start: +e.target.value })} /></label>
             <label className="lab">To <input className="num" type="number" step="0.1" value={el.end ?? 0}
                    onChange={(e) => upd(i, { end: +e.target.value })} /></label>
+            {(el.type === "box" || el.type === "text") && (
+              <label className="lab">Color <input type="color" value={el.color || "#FF6B57"}
+                     onChange={(e) => upd(i, { color: e.target.value })} /></label>
+            )}
           </div>
+          {el.type === "text" && (
+            <>
+              <label className="lab">Size <b>{Math.round((el.size || 0.045) * 1000)}</b></label>
+              <input type="range" min="20" max="120" value={Math.round((el.size || 0.045) * 1000)}
+                     onChange={(e) => upd(i, { size: +e.target.value / 1000 })} />
+            </>
+          )}
         </div>
       ))}
       {!els.length && <p className="hint">No elements yet.</p>}

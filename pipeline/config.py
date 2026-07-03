@@ -34,6 +34,17 @@ DEFAULTS = {
     "bg_style": "gradient",      # gradient | mesh | noise (when no wallpaper)
     "vertical_stack": True,      # 9:16 uses the stacked layout (video top, brand below)
     "browser_url": None,         # text in the browser theme's URL pill
+    # --- style v2: typography + captions ---
+    "font": None,                # bundled font id (pipeline/fonts.py); None = system default
+    "card_align": None,          # None = auto by card style; "left" | "center"
+    "card_title_color": None,    # None = auto (white, or dark on minimal)
+    "card_sub_color": None,      # None = auto
+    "card_scale": 1.0,           # card title/subtitle size multiplier (0.7-1.4)
+    "cap_pos": "bottom",         # caption position: bottom | top
+    "cap_scale": 1.0,            # caption size multiplier (0.7-1.6)
+    "cap_color": "#FFFFFF",      # caption text color
+    "cap_bg": "box",             # caption background: box | none
+    "cap_bg_opacity": 0.58,      # caption box opacity 0-1
     # --- voice / narration ---
     "original_voice": False,     # keep the recorded audio instead of revoicing
     "transition": "none",        # scene transition: none | dissolve | slide

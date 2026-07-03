@@ -151,7 +151,15 @@ def caption_filter(txt_path, W, H):
     return "drawtext=" + ":".join(kv)
 
 
-def find_font(size):
+def find_font(size, bold=True):
+    """Card text font: the project's bundled font first, then the system hunt."""
+    import fonts as _fonts
+    p = _fonts.path(globals().get("FONT_ID"), bold=bold)
+    if p:
+        try:
+            return ImageFont.truetype(p, size)
+        except Exception:
+            pass
     for p in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/SFNS.ttf",
               "/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"]:
         if os.path.exists(p):
@@ -215,11 +223,18 @@ def card(path, W, H, title, subtitle, style=None):
             img.alpha_composite(lg, pos)
         except Exception:
             pass
+    align = globals().get("CARD_ALIGN")
+    if align in ("left", "center"):
+        left = align == "left"
     img = img.convert("RGB")
     d = ImageDraw.Draw(img)
-    tf = find_font(int(H * 0.09)); sf = find_font(int(H * 0.038))
-    tcol = (18, 26, 40) if dark_text else (255, 255, 255)
-    scol = (CTOP if dark_text else (150, 200, 255))
+    scale = float(globals().get("CARD_SCALE") or 1.0)
+    tf = find_font(int(H * 0.09 * scale), bold=True); sf = find_font(int(H * 0.038 * scale), bold=False)
+    import config as _c
+    tcol = _c.hex_rgb(globals()["CARD_TITLE_COLOR"]) if globals().get("CARD_TITLE_COLOR") \
+        else ((18, 26, 40) if dark_text else (255, 255, 255))
+    scol = _c.hex_rgb(globals()["CARD_SUB_COLOR"]) if globals().get("CARD_SUB_COLOR") \
+        else (CTOP if dark_text else (150, 200, 255))
     tw = d.textbbox((0, 0), title, font=tf); sw = d.textbbox((0, 0), subtitle, font=sf)
     if left:
         d.text((W * 0.055, H * 0.46), title, font=tf, fill=tcol)
@@ -243,6 +258,12 @@ def main():
     import config
     cfg = config.load(PROJ)
     global VOICE, TITLE, SUBTITLE, GLOSSARY, TOP, BOT, CTOP, CBOT, LOGO, CAPTIONS, MUSIC, MUSIC_GAIN, ORIGINAL_VOICE, TRANSITION, LANG, CARD_STYLE
+    global FONT_ID, CARD_ALIGN, CARD_TITLE_COLOR, CARD_SUB_COLOR, CARD_SCALE
+    FONT_ID = cfg.get("font")
+    CARD_ALIGN = cfg.get("card_align")
+    CARD_TITLE_COLOR = cfg.get("card_title_color")
+    CARD_SUB_COLOR = cfg.get("card_sub_color")
+    CARD_SCALE = float(cfg.get("card_scale") or 1.0)
     VOICE = cfg["voice"]; TITLE = cfg["title"]; SUBTITLE = cfg["subtitle"]
     GLOSSARY = cfg["glossary"]; LOGO = cfg.get("logo")
     TOP = config.hex_rgb(cfg["brand_top"]); BOT = config.hex_rgb(cfg["brand_bottom"])
@@ -405,7 +426,8 @@ def main():
     if tts_errs:
         raise SystemExit("TTS generation failed — nothing was rendered:\n" + "\n".join(tts_errs))
 
-    card_sig = (CARD_STYLE, CTOP, CBOT, LOGO or "", W, H)
+    card_sig = (CARD_STYLE, CTOP, CBOT, LOGO or "", W, H,
+                FONT_ID or "", CARD_ALIGN or "", CARD_TITLE_COLOR or "", CARD_SUB_COLOR or "", CARD_SCALE)
     used = set()
 
     def _cached(out):
@@ -634,7 +656,13 @@ def render_fx(base, W, H, timeline, zooms_saved, zooms_edited, elements=None):
     elements = elements or []
     print(f"  fx: {len(zoom_events)} zooms, {len(elements)} elements, captions={'on' if caps else 'off'}")
     final = f"{PROJ}/revoiced.mp4"
-    graph, outlab, imgs = timeline_fx.build_graph(zoom_events, cap_events, elements, W, H, 30, CAP_FONT, f"{PROJ}/seg")
+    import fonts as _fonts
+    cap_font = _fonts.path(cfg.get("font")) or CAP_FONT
+    cap_style = {"pos": cfg.get("cap_pos"), "scale": cfg.get("cap_scale"),
+                 "color": cfg.get("cap_color"), "bg": cfg.get("cap_bg"),
+                 "bg_opacity": cfg.get("cap_bg_opacity")}
+    graph, outlab, imgs = timeline_fx.build_graph(zoom_events, cap_events, elements, W, H, 30, cap_font,
+                                                  f"{PROJ}/seg", cap_style=cap_style)
     if graph:
         inputs = ["-i", base]
         for s in imgs:

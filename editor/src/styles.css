@@ -114,3 +114,13 @@ textarea, input, select { background: var(--bg); border: 1px solid var(--line); 
 .drawlayer { position: absolute; inset: 0; z-index: 8; cursor: crosshair; }
 .drawrect { position: absolute; border: 2px dashed var(--mint); background: rgba(52, 216, 201, 0.12); pointer-events: none; }
 input[type="color"] { width: 38px; height: 28px; padding: 2px; }
+
+/* Bundled brand fonts — parity with pipeline/fonts.py (server render) */
+@font-face { font-family: "Inter"; src: url("/assets/fonts/inter-400.ttf"); font-weight: 400; }
+@font-face { font-family: "Inter"; src: url("/assets/fonts/inter-700.ttf"); font-weight: 700; }
+@font-face { font-family: "Space Grotesk"; src: url("/assets/fonts/space-grotesk-400.ttf"); font-weight: 400; }
+@font-face { font-family: "Space Grotesk"; src: url("/assets/fonts/space-grotesk-700.ttf"); font-weight: 700; }
+@font-face { font-family: "Playfair Display"; src: url("/assets/fonts/playfair-display-400.ttf"); font-weight: 400; }
+@font-face { font-family: "Playfair Display"; src: url("/assets/fonts/playfair-display-700.ttf"); font-weight: 700; }
+@font-face { font-family: "JetBrains Mono"; src: url("/assets/fonts/jetbrains-mono-400.ttf"); font-weight: 400; }
+@font-face { font-family: "JetBrains Mono"; src: url("/assets/fonts/jetbrains-mono-700.ttf"); font-weight: 700; }

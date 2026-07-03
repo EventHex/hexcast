@@ -1,6 +1,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, post } from "../api.js";
 
+// one-click coherent looks: frame + background + cards + captions + font
+const PRESETS = [
+  ["Clean light", { frame_theme: "float", bg_style: "gradient", card_style: "minimal", shadow: "light",
+                    radius: 14, font: "inter", cap_bg: "box", cap_bg_opacity: 0.45, cap_color: "#FFFFFF" }],
+  ["Bold dark", { frame_theme: "float", bg_style: "mesh", card_style: "radial", shadow: "heavy",
+                  radius: 24, font: "space-grotesk", cap_bg: "box", cap_bg_opacity: 0.7, cap_color: "#FFFFFF" }],
+  ["Editorial", { frame_theme: "split", bg_style: "gradient", card_style: "accent", shadow: "medium",
+                  radius: 10, font: "playfair-display", cap_bg: "none", cap_color: "#FFFFFF", cap_scale: 1.1 }],
+  ["Dev tool", { frame_theme: "browser", bg_style: "noise", card_style: "gradient", shadow: "medium",
+                 radius: 12, font: "jetbrains-mono", cap_bg: "box", cap_bg_opacity: 0.6 }],
+];
+
+const FONTS = [
+  ["", "System default"], ["inter", "Inter"], ["space-grotesk", "Space Grotesk"],
+  ["playfair-display", "Playfair Display"], ["jetbrains-mono", "JetBrains Mono"],
+];
+
 const SEL = (label, value, onChange, opts) => (
   <label className="lab col" key={label}>
     {label}
@@ -78,6 +95,13 @@ export function StylePanel({ pid, cfg, setCfg }) {
                 onClick={saveAsBrand}>＋ Save as brand</button>
       </div>
       <p className="hint">A brand applies colors, logo, cards, frame, voice and music in one click — set once, reuse on every video.</p>
+      <div className="row gap wrap">
+        {PRESETS.map(([name, patch]) => (
+          <button key={name} className="btn sm ghost" title="Apply this preset look" onClick={() => u(patch)}>
+            {name}
+          </button>
+        ))}
+      </div>
 
       <hr className="sep" />
       <span className="eyebrow">Intro / outro cards</span>
@@ -109,6 +133,49 @@ export function StylePanel({ pid, cfg, setCfg }) {
           </button>
         )}
       </div>
+
+      <hr className="sep" />
+      <span className="eyebrow">Typography</span>
+      <div className="row gap">
+        {SEL("Font", cfg.font || "", (v) => u({ font: v || null }), FONTS)}
+        {SEL("Card text align", cfg.card_align || "", (v) => u({ card_align: v || null }), [
+          ["", "Auto"], ["left", "Left"], ["center", "Center"]])}
+      </div>
+      <label className="lab">Card text size <b>{Math.round((cfg.card_scale ?? 1) * 100)}%</b></label>
+      <input type="range" min="70" max="140" value={Math.round((cfg.card_scale ?? 1) * 100)}
+             onChange={(e) => u({ card_scale: +e.target.value / 100 })} />
+      <div className="row gap">
+        <label className="lab">Title <input type="color" value={cfg.card_title_color || "#ffffff"}
+               onChange={(e) => u({ card_title_color: e.target.value })} /></label>
+        <label className="lab">Subtitle <input type="color" value={cfg.card_sub_color || "#96c8ff"}
+               onChange={(e) => u({ card_sub_color: e.target.value })} /></label>
+        {(cfg.card_title_color || cfg.card_sub_color) && (
+          <button className="btn sm ghost" onClick={() => u({ card_title_color: null, card_sub_color: null })}>
+            Auto colors
+          </button>
+        )}
+      </div>
+
+      <hr className="sep" />
+      <span className="eyebrow">Captions</span>
+      <div className="row gap">
+        {SEL("Position", cfg.cap_pos || "bottom", (v) => u({ cap_pos: v }), [
+          ["bottom", "Bottom"], ["top", "Top"]])}
+        {SEL("Background", cfg.cap_bg || "box", (v) => u({ cap_bg: v }), [
+          ["box", "Dark box"], ["none", "None"]])}
+        <label className="lab">Text <input type="color" value={cfg.cap_color || "#ffffff"}
+               onChange={(e) => u({ cap_color: e.target.value })} /></label>
+      </div>
+      <label className="lab">Caption size <b>{Math.round((cfg.cap_scale ?? 1) * 100)}%</b></label>
+      <input type="range" min="70" max="160" value={Math.round((cfg.cap_scale ?? 1) * 100)}
+             onChange={(e) => u({ cap_scale: +e.target.value / 100 })} />
+      {(cfg.cap_bg || "box") === "box" && (
+        <>
+          <label className="lab">Box opacity <b>{Math.round((cfg.cap_bg_opacity ?? 0.58) * 100)}%</b></label>
+          <input type="range" min="10" max="100" value={Math.round((cfg.cap_bg_opacity ?? 0.58) * 100)}
+                 onChange={(e) => u({ cap_bg_opacity: +e.target.value / 100 })} />
+        </>
+      )}
 
       <hr className="sep" />
       <span className="eyebrow">Frame</span>

@@ -76,16 +76,24 @@ def _zoom_filter(events, W, H, fps):
     return f"zoompan=z='{Z}':x='{X}':y='{Y}':d=1:s={W}x{H}:fps={fps}"
 
 
-def _caption_filters(events, W, H, font, workdir):
-    fs = max(22, int(H * 0.031))
+def _caption_filters(events, W, H, font, workdir, style=None):
+    """style (all optional): {pos: bottom|top, scale, color, bg: box|none,
+    bg_opacity} — the editor preview mirrors these exactly."""
+    st = style or {}
+    fs = max(22, int(H * 0.031 * float(st.get("scale") or 1.0)))
+    color = (st.get("color") or "#FFFFFF").lstrip("#")
+    boxed = (st.get("bg") or "box") != "none"
+    op = min(1.0, max(0.0, float(st.get("bg_opacity") if st.get("bg_opacity") is not None else 0.58)))
+    y = f"{int(H*0.062)}" if st.get("pos") == "top" else f"h-text_h-{int(H*0.062)}"
     out = []
     for k, c in enumerate(events):
         txt = os.path.join(workdir, f"capx_{k}.txt")
         open(txt, "w", encoding="utf-8").write(c["text"])
-        kv = [f"textfile='{txt}'", "fontcolor=white", f"fontsize={fs}", "box=1",
-              "boxcolor=black@0.58", f"boxborderw={int(fs*0.42)}", "line_spacing=6",
-              "x=(w-text_w)/2", f"y=h-text_h-{int(H*0.062)}",
+        kv = [f"textfile='{txt}'", f"fontcolor=0x{color}", f"fontsize={fs}", "line_spacing=6",
+              "x=(w-text_w)/2", f"y={y}",
               f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'"]
+        if boxed:
+            kv[3:3] = ["box=1", f"boxcolor=black@{op:.2f}", f"boxborderw={int(fs*0.42)}"]
         if font:
             kv.insert(0, f"fontfile='{font}'")
         out.append("drawtext=" + ":".join(kv))
@@ -128,7 +136,7 @@ def _elt_linear(e, W, H, font, workdir, k):
     return f"drawbox=x={x}:y={y}:w={w}:h={h}:color=0x{col}@1:t=8:{en}"
 
 
-def build_graph(zoom_events, caption_events, elements, W, H, fps, font, workdir):
+def build_graph(zoom_events, caption_events, elements, W, H, fps, font, workdir, cap_style=None):
     """Build a -filter_complex graph for zoom + captions + elements.
     Returns (graph_str, out_label, image_srcs). image_srcs are extra -i inputs
     the caller must add AFTER the base video (input index 1, 2, ...)."""
@@ -137,7 +145,7 @@ def build_graph(zoom_events, caption_events, elements, W, H, fps, font, workdir)
     z = _zoom_filter(zoom_events or [], W, H, fps)
     if z:
         linear.append(z)
-    linear += _caption_filters(caption_events or [], W, H, font, workdir)
+    linear += _caption_filters(caption_events or [], W, H, font, workdir, cap_style)
     for k, e in enumerate(elements):
         if e.get("type") in ("box", "redact", "text"):
             linear.append(_elt_linear(e, W, H, font, workdir, k))

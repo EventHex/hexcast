@@ -101,6 +101,13 @@ def src_size():
 
 
 def find_font(size, bold=True):
+    import fonts as _fonts
+    p = _fonts.path(CFG.get("font"), bold=bold)
+    if p:
+        try:
+            return ImageFont.truetype(p, size)
+        except Exception:
+            pass
     cands = (["/System/Library/Fonts/Supplemental/Arial Bold.ttf"] if bold else []) + [
         "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"]
