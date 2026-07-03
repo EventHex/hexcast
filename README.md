@@ -43,10 +43,17 @@ changed, so captions can never desync from the audio.
 ## Use
 
 1. Record a demo (tab + your mic) with the recorder extension → `.webm`,
-   or upload any screen recording.
-2. Set voice / branding (intro/outro cards, colors, logo).
-3. Edit any script line (only that line re-voices); toggle per-line zooms.
-4. **Export** → download 16:9 / 9:16 / 1:1.
+   or upload any screen recording on the **Library** home page.
+2. Apply a **brand** (colors, logo, cards, voice, music — set once, reuse on
+   every video) or a one-click **style preset**; tweak fonts, captions and
+   frame in the Style tab.
+3. Edit any script line (only that line re-voices); cut lines and trim the
+   footage each line uses; drag zooms on the timeline; draw boxes / blurs /
+   redactions / text on the preview.
+4. **Export** → 16:9 / 9:16 / 1:1 — or batch-export the same video in other
+   languages (translated narration + native voice, one click).
+
+Keys, providers and storage retention live in the **⚙ Settings** tab.
 
 ## Layout
 

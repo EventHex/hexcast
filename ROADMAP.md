@@ -2,6 +2,13 @@
 
 *(working name; product = open-source demo-video studio: raw screen recording → revoiced, brand-framed product video)*
 
+> **Status 2026-07-03: phases 0–9 implemented and verified in this repo**
+> (extraction, BYOK settings + providers, zero-key mode, Brand Kit, Library +
+> classic-UI removal, Style v2, trim, multi-language batch). Phase 10 repo
+> collateral (README/CONTRIBUTING/CI/templates) is in place. Remaining items
+> are external: publish the GitHub repo, final name/trademark check, recorder
+> extension rename, demo GIF, announcement.
+
 ## Context
 
 Decisions locked (2026-07-03):
