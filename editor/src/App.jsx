@@ -366,7 +366,7 @@ export default function App() {
           )}
           {tab === "audio" && (
             <AudioPanel pid={pid} cfg={cfg} setCfg={setCfgD} script={script} setScript={setScriptD}
-                        playheadBaked={playheadBaked} />
+                        playheadBaked={playheadBaked} setStatus={setStatus} />
           )}
           {tab === "style" && <StylePanel pid={pid} cfg={cfg} setCfg={setCfgD} />}
           {tab === "settings" && <SettingsPanel setStatus={setStatus} />}

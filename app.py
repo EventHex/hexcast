@@ -567,6 +567,64 @@ def _spawn(d, steps_defs, record_state=False):
     return {"job": job}
 
 
+# default Chirp3-HD voice per target language — mirrors the editor's LANGS list
+LANG_VOICES = {
+    "English": "en-IN-Chirp3-HD-Aoede", "Hindi": "hi-IN-Chirp3-HD-Aoede",
+    "Tamil": "ta-IN-Chirp3-HD-Aoede", "Telugu": "te-IN-Chirp3-HD-Aoede",
+    "Malayalam": "ml-IN-Chirp3-HD-Aoede", "Kannada": "kn-IN-Chirp3-HD-Aoede",
+    "Bengali": "bn-IN-Chirp3-HD-Aoede", "Gujarati": "gu-IN-Chirp3-HD-Aoede",
+    "Marathi": "mr-IN-Chirp3-HD-Aoede", "Arabic": "ar-XA-Chirp3-HD-Aoede",
+    "Spanish": "es-US-Chirp3-HD-Aoede", "French": "fr-FR-Chirp3-HD-Aoede",
+    "German": "de-DE-Chirp3-HD-Aoede", "Portuguese": "pt-BR-Chirp3-HD-Aoede",
+    "Japanese": "ja-JP-Chirp3-HD-Aoede", "Korean": "ko-KR-Chirp3-HD-Aoede",
+    "Indonesian": "id-ID-Chirp3-HD-Aoede",
+}
+
+
+@app.post("/api/projects/{pid}/export-langs")
+def export_langs(pid: str, body: dict = Body(...)):
+    """Batch: same script, N languages. Each language becomes its own derived
+    project (translated script + language voice), rendered sequentially in one
+    job — the derived projects show up in the Library with their exports."""
+    d = proj_dir(pid)
+    if not os.path.exists(os.path.join(d, "script.json")):
+        raise HTTPException(400, "prepare the script first")
+    langs = [l for l in (body.get("langs") or []) if l in LANG_VOICES]
+    if not langs:
+        raise HTTPException(400, "no valid languages")
+    import re, shutil
+    src_cfg = cfgmod.load(d)
+    steps = []
+    for lang in langs:
+        slug = re.sub(r"[^a-z]", "", lang.lower())[:12]
+        nd = os.path.join(PROJECTS, f"{pid}-{slug}")
+        os.makedirs(nd, exist_ok=True)
+        c = dict(src_cfg)
+        c["lang"] = lang
+        c["voice"] = LANG_VOICES[lang]
+        c["name"] = f"{src_cfg.get('name') or pid} ({lang})"
+        # per-project style files: point the clone at its own copies
+        for k in ("logo", "background", "music"):
+            p = c.get(k)
+            if p and str(p).startswith(os.path.abspath(d) + os.sep) and os.path.isfile(p):
+                shutil.copy(p, os.path.join(nd, os.path.basename(p)))
+                c[k] = os.path.join(nd, os.path.basename(p))
+        cfgmod.save(nd, c)
+        shutil.copy(os.path.join(d, "script.json"), os.path.join(nd, "script.json"))
+        for e in ("webm", "mp4", "mov", "mkv"):
+            s, t = os.path.join(d, f"raw.{e}"), os.path.join(nd, f"raw.{e}")
+            if os.path.exists(s) and not os.path.exists(t):
+                try:
+                    os.link(s, t)          # hardlink: no extra disk for the raw
+                except OSError:
+                    shutil.copy(s, t)
+        if os.path.exists(os.path.join(d, "events.json")):
+            shutil.copy(os.path.join(d, "events.json"), nd)
+        steps.append((f"{lang}: translate + revoice", ["pipeline/build_revoice.py", nd, "--from-script"]))
+        steps.append((f"{lang}: framing & export", ["pipeline/polish_export.py", nd]))
+    return _spawn(d, steps)
+
+
 @app.post("/api/projects/{pid}/prepare")
 def prepare(pid: str):
     # Phase 1: transcribe + clean + zoom -> editable script.json. No render.
