@@ -10,14 +10,17 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
 ROOT = os.path.dirname(os.path.abspath(__file__))   # repo root
+load_dotenv(os.path.join(ROOT, ".env"))   # so /api/settings reflects .env keys too
 HERE = ROOT
 # project data lives outside the repo when REMASTER_DATA_DIR is set
 PROJECTS = os.environ.get("REMASTER_DATA_DIR") or os.path.join(ROOT, "projects")
 os.makedirs(PROJECTS, exist_ok=True)
 sys.path.insert(0, os.path.join(ROOT, "pipeline"))
 import config as cfgmod
+from providers import settings as settingsmod
 
 app = FastAPI(title="Remaster")
 
@@ -62,7 +65,7 @@ def _prune_jobs():
         JOBS.pop(j, None)
 
 
-def run_job(job: str, steps, cwd, proj: str, record_state=False):
+def run_job(job: str, steps, cwd, proj: str, record_state=False, env=None):
     lock = _proj_lock(proj)
     JOBS[job] = {"status": "queued", "step": "waiting for a free slot", "log": [],
                  "error": None, "cancel": False, "progress": 0.0}
@@ -80,7 +83,8 @@ def run_job(job: str, steps, cwd, proj: str, record_state=False):
                 # own process group: cancelling kills ffmpeg grandchildren too,
                 # never leaving orphan encoders writing into project files
                 p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     text=True, start_new_session=True)
+                                     text=True, start_new_session=True,
+                                     env={**os.environ, **(env or {})})
                 JOBS[job]["_proc"] = p
                 errbuf: list = []
                 t = threading.Thread(target=lambda: errbuf.append(p.stderr.read() or ""), daemon=True)
@@ -287,6 +291,7 @@ def rewrite_script(pid: str):
         return data
     sys.path.insert(0, os.path.join(ROOT, "pipeline"))
     import cerebras_clean
+    os.environ.update(settingsmod.provider_env(PROJECTS))  # in-process call: same key routing as subprocesses
     cfg = cfgmod.load(d)
     new = cerebras_clean.rewrite_lines([segs[i]["en"] for i in idx], glossary=cfg.get("glossary"))
     for j, i in enumerate(idx):
@@ -397,7 +402,8 @@ def _spawn(d, steps_defs, record_state=False):
     # cwd stays ROOT only so the pipeline scripts' imports + .env resolve
     steps = [(desc, [sys.executable] + [a.replace("{REL}", d) for a in args]) for desc, args in steps_defs]
     threading.Thread(target=run_job, args=(job, steps, ROOT, d),
-                     kwargs={"record_state": record_state}, daemon=True).start()
+                     kwargs={"record_state": record_state,
+                             "env": settingsmod.provider_env(PROJECTS)}, daemon=True).start()
     return {"job": job}
 
 
@@ -458,6 +464,17 @@ def render(pid: str):
         ("Re-render from edited script", ["pipeline/build_revoice.py", "{REL}", "--from-script"]),
         ("Frame + export", ["pipeline/polish_export.py", "{REL}"]),
     ])
+
+
+@app.get("/api/settings")
+def get_settings():
+    return settingsmod.masked_view(PROJECTS)
+
+
+@app.put("/api/settings")
+def put_settings(body: dict = Body(...)):
+    settingsmod.save_settings(PROJECTS, body)
+    return settingsmod.masked_view(PROJECTS)
 
 
 @app.get("/api/jobs/{job}")

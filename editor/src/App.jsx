@@ -6,6 +6,7 @@ import { ZoomPanel } from "./components/ZoomPanel.jsx";
 import { StylePanel } from "./components/StylePanel.jsx";
 import { AudioPanel } from "./components/AudioPanel.jsx";
 import { ElementsPanel } from "./components/ElementsPanel.jsx";
+import { SettingsPanel } from "./components/SettingsPanel.jsx";
 import { Timeline } from "./components/Timeline.jsx";
 import { api, jput, post, pollJob } from "./api.js";
 
@@ -342,9 +343,9 @@ export default function App() {
 
         <aside>
           <nav>
-            {["script", "zooms", "elements", "audio", "style"].map((t) => (
+            {["script", "zooms", "elements", "audio", "style", "settings"].map((t) => (
               <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-                {t[0].toUpperCase() + t.slice(1)}
+                {t === "settings" ? "⚙" : t[0].toUpperCase() + t.slice(1)}
               </button>
             ))}
           </nav>
@@ -363,6 +364,7 @@ export default function App() {
                         playheadBaked={playheadBaked} />
           )}
           {tab === "style" && <StylePanel pid={pid} cfg={cfg} setCfg={setCfgD} />}
+          {tab === "settings" && <SettingsPanel setStatus={setStatus} />}
         </aside>
       </main>
     </div>
