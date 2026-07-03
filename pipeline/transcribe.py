@@ -49,7 +49,12 @@ def groq_transcribe(audio, key):
 
 def local_transcribe(audio):
     """Local faster-whisper fallback."""
-    from faster_whisper import WhisperModel
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        raise SystemExit(
+            "Local transcription needs faster-whisper: pip install faster-whisper\n"
+            "(or add a Groq API key in Settings for fast cloud transcription)")
     m = WhisperModel("small", device="cpu", compute_type="int8")
     segs, info = m.transcribe(audio, word_timestamps=True, vad_filter=True)
     out = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()} for s in segs]
