@@ -1,0 +1,14 @@
+# Remaster server + pipeline
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+requests>=2.31
+python-dotenv>=1.0
+Pillow>=10.0
+
+# Optional — only needed for the Google TTS service-account auth path
+# (API-key auth works without it):
+google-auth>=2.29
+
+# Optional — local zero-key transcription (used when no GROQ_API_KEY is set):
+#   pip install faster-whisper
