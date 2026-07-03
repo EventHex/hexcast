@@ -30,6 +30,7 @@ export function SettingsPanel({ setStatus }) {
   const [sel, setSel] = useState({});       // {stt: "auto", ...}
   const [llm, setLlm] = useState({ openai_base_url: "", openai_model: "" });
   const [keys, setKeys] = useState({});     // local unsaved key inputs
+  const [retention, setRetention] = useState(0);
   const [dirty, setDirty] = useState(false);
 
   const refresh = async () => {
@@ -37,6 +38,7 @@ export function SettingsPanel({ setStatus }) {
     setView(v);
     setSel({ stt: v.stt.provider, llm: v.llm.provider, vision: v.vision.provider, tts: v.tts.provider });
     setLlm({ openai_base_url: v.llm.openai_base_url || "", openai_model: v.llm.openai_model || "" });
+    setRetention(v.retention?.days || 0);
     setKeys({});
     setDirty(false);
   };
@@ -49,6 +51,7 @@ export function SettingsPanel({ setStatus }) {
     const body = {
       stt: { provider: sel.stt }, vision: { provider: sel.vision }, tts: { provider: sel.tts },
       llm: { provider: sel.llm, ...llm },
+      retention: { days: +retention || 0 },
       keys: Object.fromEntries(Object.entries(keys).filter(([, v]) => v !== "")),
     };
     await jput("/api/settings", body);
@@ -86,6 +89,14 @@ export function SettingsPanel({ setStatus }) {
                    onChange={(e) => { setLlm({ ...llm, openai_model: e.target.value }); setDirty(true); }} /></label>
         </div>
       )}
+
+      <hr className="sep" />
+      <span className="eyebrow">Storage</span>
+      <label className="lab col">Auto-clean exported projects after (days, 0 = never)
+        <input className="num" type="number" min="0" max="365" value={retention}
+               onChange={(e) => { setRetention(e.target.value); setDirty(true); }} />
+      </label>
+      <p className="hint">Cleaning removes the raw recording and render caches of old exported projects; scripts, settings and exported videos stay.</p>
 
       <hr className="sep" />
       <span className="eyebrow">API keys (stored locally, never leave this machine)</span>

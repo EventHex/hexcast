@@ -6,8 +6,8 @@ Run:  python3 -m uvicorn app:app --port 8765   (from the repo root)
 """
 from __future__ import annotations
 import os, sys, json, subprocess, threading, uuid
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -123,9 +123,162 @@ def run_job(job: str, steps, cwd, proj: str, record_state=False, env=None):
             JOBS[job].update(status="error", error=str(e))
 
 
-@app.get("/", response_class=HTMLResponse)
-def index():
-    return open(os.path.join(HERE, "index.html"), encoding="utf-8").read()
+@app.get("/")
+def index(request: Request):
+    # old links / the recorder extension open /?project=<id> — keep that working
+    q = str(request.query_params)
+    return RedirectResponse("/editor/" + (f"?{q}" if q else ""))
+
+
+def _proj_size(d):
+    total = 0
+    for root, _, files in os.walk(d):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+HEAVY = ("base.mp4", "revoiced.mp4", "audio.mp3")   # regenerable from raw; raw itself is the biggest
+HEAVY_DIRS = ("seg", "zoomframes")
+
+
+def prune_project(d, keep_raw=False):
+    """Drop regenerable intermediates (and raw unless keep_raw); keep
+    config/script/exports. Returns bytes freed."""
+    freed = 0
+    import shutil, glob
+    victims = [os.path.join(d, f) for f in HEAVY]
+    if not keep_raw:
+        victims += glob.glob(os.path.join(d, "raw.*"))
+    for p in victims:
+        if os.path.isfile(p):
+            freed += os.path.getsize(p)
+            os.remove(p)
+    for sub in HEAVY_DIRS:
+        p = os.path.join(d, sub)
+        if os.path.isdir(p):
+            freed += _proj_size(p)
+            shutil.rmtree(p, ignore_errors=True)
+    return freed
+
+
+def auto_prune():
+    """Retention policy from settings: prune exported projects untouched for N days."""
+    days = int((settingsmod.load_settings(PROJECTS).get("retention") or {}).get("days") or 0)
+    if days <= 0:
+        return
+    import time as _t
+    cutoff = _t.time() - days * 86400
+    for pid in os.listdir(PROJECTS):
+        d = os.path.join(PROJECTS, pid)
+        if not os.path.isdir(d) or pid == "brands":
+            continue
+        exported = any(f.startswith("framed-") for f in os.listdir(d))
+        if exported and os.path.getmtime(d) < cutoff:
+            freed = prune_project(d)
+            if freed:
+                print(f"retention: pruned {pid} ({freed // 1048576} MB)")
+
+
+@app.on_event("startup")
+def _startup_prune():
+    threading.Thread(target=auto_prune, daemon=True).start()
+
+
+@app.get("/api/projects")
+def list_projects():
+    out = []
+    for pid in os.listdir(PROJECTS):
+        d = os.path.join(PROJECTS, pid)
+        if not os.path.isdir(d) or pid == "brands":
+            continue
+        cfgp = os.path.join(d, "config.json")
+        name = pid
+        if os.path.isfile(cfgp):
+            try:
+                name = json.load(open(cfgp, encoding="utf-8")).get("name") or pid
+            except Exception:
+                pass
+        has_raw = any(os.path.exists(os.path.join(d, f"raw.{e}")) for e in ("webm", "mp4", "mov", "mkv"))
+        exported = any(f.startswith("framed-") and f.endswith(".mp4") for f in os.listdir(d))
+        status = "exported" if exported else \
+                 "ready" if os.path.exists(os.path.join(d, "script.json")) else \
+                 "recorded" if has_raw else "empty"
+        out.append({"id": pid, "name": name, "status": status,
+                    "mtime": os.path.getmtime(d), "size": _proj_size(d)})
+    out.sort(key=lambda p: -p["mtime"])
+    return {"projects": out}
+
+
+@app.put("/api/projects/{pid}/name")
+def rename_project(pid: str, body: dict = Body(...)):
+    d = proj_dir(pid)
+    c = cfgmod.load(d); c["name"] = str(body.get("name") or "").strip() or pid
+    cfgmod.save(d, c)
+    return {"ok": True, "name": c["name"]}
+
+
+@app.post("/api/projects/{pid}/duplicate")
+def duplicate_project(pid: str):
+    """New project inheriting this one's settings/brand (no media)."""
+    src = proj_dir(pid)
+    new = "web-" + uuid.uuid4().hex[:8]
+    nd = os.path.join(PROJECTS, new)
+    os.makedirs(nd, exist_ok=True)
+    c = cfgmod.load(src)
+    c["name"] = (c.get("name") or pid) + " copy"
+    # carry per-project style files so the copy is truly self-contained
+    for k in ("logo", "background", "music"):
+        p = c.get(k)
+        if p and str(p).startswith(os.path.abspath(src) + os.sep) and os.path.isfile(p):
+            import shutil
+            dst = os.path.join(nd, os.path.basename(p))
+            shutil.copy(p, dst)
+            c[k] = dst
+    cfgmod.save(nd, c)
+    return {"id": new}
+
+
+@app.get("/api/projects/{pid}/thumb")
+def project_thumb(pid: str):
+    d = proj_dir(pid)
+    thumb = os.path.join(d, "thumb.jpg")
+    if not os.path.isfile(thumb):
+        src = next((os.path.join(d, f) for f in
+                    ("base.mp4", "raw.webm", "raw.mp4", "raw.mov", "raw.mkv")
+                    if os.path.exists(os.path.join(d, f))), None)
+        if not src:
+            raise HTTPException(404, "no media")
+        subprocess.run(["ffmpeg", "-y", "-ss", "1", "-i", src, "-frames:v", "1",
+                        "-vf", "scale=480:-1", "-q:v", "6", thumb], capture_output=True)
+        if not os.path.isfile(thumb):
+            raise HTTPException(404, "no thumb")
+    return FileResponse(thumb)
+
+
+@app.post("/api/prune")
+def prune(body: dict = Body(default={})):
+    """Manual prune: {'ids': [...]} or {'days': N}; dry=true lists what would go."""
+    dry = bool(body.get("dry"))
+    ids = body.get("ids")
+    days = int(body.get("days") or 0)
+    import time as _t
+    cutoff = _t.time() - days * 86400 if days else None
+    hits = []
+    for pid in (ids or os.listdir(PROJECTS)):
+        d = os.path.join(PROJECTS, pid)
+        if not os.path.isdir(d) or pid == "brands":
+            continue
+        if cutoff and os.path.getmtime(d) >= cutoff:
+            continue
+        if dry:
+            hits.append({"id": pid, "size": _proj_size(d)})
+        else:
+            hits.append({"id": pid, "freed": prune_project(d)})
+    return {"pruned": hits, "dry": dry}
 
 
 @app.post("/api/projects")

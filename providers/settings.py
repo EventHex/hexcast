@@ -30,8 +30,11 @@ DEFAULTS = {
             "openai_model": "gpt-4o-mini"},
     "vision": {"provider": "auto"},                 # auto | cerebras | gemini | none
     "tts": {"provider": "auto"},                    # auto | google | elevenlabs | piper | original
+    "retention": {"days": 0},                       # >0: auto-prune heavy intermediates older than N days
     "keys": {k: "" for k in KEY_ENV},
 }
+
+SECTIONS = ("stt", "llm", "vision", "tts", "retention")
 
 
 def _path(data_dir):
@@ -54,7 +57,7 @@ def save_settings(data_dir, patch: dict) -> dict:
     """Merge a partial update. For keys: empty string = leave unchanged,
     None = clear, non-empty = set."""
     s = load_settings(data_dir)
-    for sect in ("stt", "llm", "vision", "tts"):
+    for sect in SECTIONS:
         if isinstance(patch.get(sect), dict):
             s[sect].update({k: v for k, v in patch[sect].items() if k in s[sect]})
     for name, val in (patch.get("keys") or {}).items():
@@ -97,7 +100,7 @@ def provider_env(data_dir) -> dict:
 def masked_view(data_dir) -> dict:
     """Settings snapshot safe to send to the browser: keys become {set, hint, source}."""
     s = load_settings(data_dir)
-    out = {sect: dict(s[sect]) for sect in ("stt", "llm", "vision", "tts")}
+    out = {sect: dict(s[sect]) for sect in SECTIONS}
     keys = {}
     for name, var in KEY_ENV.items():
         own = s["keys"].get(name) or ""

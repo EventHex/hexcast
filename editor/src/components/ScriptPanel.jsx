@@ -98,7 +98,7 @@ export function ScriptPanel({ pid, script, setScript, seekTo, busy, setStatus })
           </div>
         )
       )}
-      {!segs.length && <p className="hint">No script yet — upload and prepare a recording in the classic UI first.</p>}
+      {!segs.length && <p className="hint">No script yet — upload a recording from the Library first.</p>}
     </div>
   );
 }

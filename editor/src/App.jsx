@@ -7,6 +7,7 @@ import { StylePanel } from "./components/StylePanel.jsx";
 import { AudioPanel } from "./components/AudioPanel.jsx";
 import { ElementsPanel } from "./components/ElementsPanel.jsx";
 import { SettingsPanel } from "./components/SettingsPanel.jsx";
+import { Library } from "./components/Library.jsx";
 import { Timeline } from "./components/Timeline.jsx";
 import { api, jput, post, pollJob } from "./api.js";
 
@@ -62,14 +63,15 @@ export default function App() {
     setScript({ zooms: [], elements: [], sounds: [], ...s });
     setSrc(meta.preview || null);
     setGenerated(!!meta.generated);
-    setStatus(meta.preview ? "Ready" : "No media yet — upload in the classic UI first");
+    setStatus(meta.preview ? "Ready" : "No media yet — upload from the Library, or record with the extension");
     return meta;
   }, []);
 
+  const [noProject, setNoProject] = useState(false);
   const prepared = useRef(false);
   useEffect(() => {
     const id = new URLSearchParams(location.search).get("project");
-    if (!id) { setStatus("Open with ?project=<id> — pick a project in the classic UI"); return; }
+    if (!id) { setNoProject(true); return; }
     setPid(id);
     (async () => {
       const meta = await load(id);
@@ -161,6 +163,9 @@ export default function App() {
 
   const cancel = () => job && post(`/api/jobs/${job}/cancel`).catch(() => {});
 
+  if (noProject) {
+    return <Library />;
+  }
   if (!cfg || !src) {
     return <div className="boot">{status}</div>;
   }
@@ -228,7 +233,7 @@ export default function App() {
         <button className="btn" disabled={!!job}
                 title="Renders the final video files. Runs only the stages your edits changed — framing is instant, re-voicing only when the script or voice changed."
                 onClick={() => run("export", "Exporting video")}>⬇ Export video</button>
-        <a className="btn sm ghost" href={`/?project=${pid}`}>Classic UI</a>
+        <a className="btn sm ghost" href="/editor/">Library</a>
       </header>
 
       {modal && !modal.minimized && (
