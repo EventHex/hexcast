@@ -59,6 +59,12 @@ export function PublishDrawer({ pid, cfg, downloadKey, onClose, setStatus }) {
               <span className="eyebrow">More</span>
               {dl("Narration audio (.mp3)", `/api/projects/${pid}/audio.mp3`)}
               {dl("Thumbnail (.png)", `/api/projects/${pid}/poster.png`)}
+              {dl("Looping GIF (.gif)", `/api/projects/${pid}/preview.gif`)}
+            </section>
+            <section>
+              <span className="eyebrow">Documentation</span>
+              <p className="hint">A step-by-step guide (SOP) built from your narration + screenshots.</p>
+              {dl("Step-by-step guide (.html)", `/api/projects/${pid}/doc.html`)}
             </section>
           </>}
 
