@@ -232,3 +232,7 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 4
 .tl-tick span { position: absolute; left: 3px; top: 1px; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .tl-head.tall { background: var(--mint); }
 .tl-empty { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--dim); font-size: 11px; pointer-events: none; opacity: .7; }
+
+.joblog { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+  font: 11px ui-monospace, monospace; color: var(--dim); max-height: 160px; overflow: auto;
+  white-space: pre-wrap; text-align: left; width: 100%; }

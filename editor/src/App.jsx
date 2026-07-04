@@ -32,10 +32,24 @@ export default function App() {
   const stageRef = useRef(null);
   const busy = useRef(false);
   const editSeq = useRef(0);   // bumped on every edit; auto-render checks it to detect mid-render edits
+  const hist = useRef({ past: [], future: [], lastAt: 0, applying: false });
+  const snap = useRef({});     // current committed {cfg, script}, read by history
+
+  // snapshot the pre-edit state, coalescing rapid edits into one undo step
+  const pushHistory = () => {
+    const h = hist.current;
+    if (h.applying || !snap.current.cfg) return;
+    const now = performance.now();
+    if (h.past.length && now - h.lastAt < 450) { h.lastAt = now; return; }
+    h.past.push(snap.current);
+    if (h.past.length > 60) h.past.shift();
+    h.future = [];
+    h.lastAt = now;
+  };
 
   // edits after the last export make the downloadable files stale
-  const setScriptD = useCallback((v) => { editSeq.current++; setDirty(true); setScript(v); }, []);
-  const setCfgD = useCallback((v) => { editSeq.current++; setDirty(true); setCfg(v); }, []);
+  const setScriptD = useCallback((v) => { pushHistory(); editSeq.current++; setDirty(true); setScript(v); }, []);
+  const setCfgD = useCallback((v) => { pushHistory(); editSeq.current++; setDirty(true); setCfg(v); }, []);
 
   // autosave: every edit persists to the server after a short pause, so
   // nothing is lost on reload and server-side actions never see stale state.
@@ -175,6 +189,7 @@ export default function App() {
         return;
       }
       setJob(r.job);
+      lastJob.current = r.job;
       const end = await pollJob(r.job, (s) => {
         const step = s.status === "queued" ? "Queued — waiting for a free render slot…" : s.step || s.status;
         setStatus((auto ? "Auto-export: " : "") + step);
@@ -228,7 +243,45 @@ export default function App() {
     return () => clearTimeout(id);
   }, [autoRender, dirty, job, cfg, script, pid]);
 
+  // keep the history's view of "current state" fresh each render
+  snap.current = { cfg, script };
+  const applyHistory = (from, to) => {
+    const h = hist.current;
+    if (!from.length) return;
+    to.push(snap.current);
+    const prev = from.pop();
+    h.applying = true;
+    setCfg(prev.cfg); setScript(prev.script); setDirty(true); editSeq.current++;
+    setTimeout(() => { h.applying = false; }, 0);
+  };
+  const undo = () => applyHistory(hist.current.past, hist.current.future);
+  const redo = () => applyHistory(hist.current.future, hist.current.past);
+
+  // keyboard shortcuts (Help lists these)
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target, editable = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if (cmd && e.key.toLowerCase() === "s") { e.preventDefault(); saveAll().then(() => setStatus("Saved ✓")); return; }
+      if (cmd && e.key.toLowerCase() === "e") { e.preventDefault(); if (!job) run("export", "Exporting video"); return; }
+      if (e.key === " " && !editable) {
+        e.preventDefault();
+        const p = playerRef.current; if (p) (p.isPlaying?.() ? p.pause() : p.play());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [job, pid, cfg, script]);
+
   const cancel = () => job && post(`/api/jobs/${job}/cancel`).catch(() => {});
+  const lastJob = useRef(null);
+  const viewLog = async () => {
+    if (modal?.log) { setModal((m) => ({ ...m, log: null })); return; }
+    if (!lastJob.current) return;
+    const s = await api(`/api/jobs/${lastJob.current}`).catch(() => null);
+    setModal((m) => ({ ...m, log: (s?.log || []).join("\n\n").slice(-4000) || "no log" }));
+  };
 
   if (noProject) {
     return <Shell />;
@@ -360,7 +413,14 @@ export default function App() {
                 <div className="modal-err">!</div>
                 <h3>Export failed</h3>
                 <p className="modal-step">{modal.error}</p>
-                <button className="btn sm ghost" onClick={() => setModal(null)}>Close</button>
+                {modal.log && <pre className="joblog">{modal.log}</pre>}
+                <div className="row gap" style={{ justifyContent: "center" }}>
+                  <button className="btn sm ghost" onClick={() => setModal(null)}>Close</button>
+                  <button className="btn sm ghost" onClick={viewLog}>{modal.log ? "Hide log" : "View log"}</button>
+                  <button className="btn sm" onClick={() => run("export", "Exporting video")}>Retry</button>
+                </div>
+                <a className="hint" href={`https://github.com/issues/new?body=${encodeURIComponent("Export failed:\n" + (modal.error || ""))}`}
+                   target="_blank" rel="noreferrer">Report this issue →</a>
               </>
             )}
           </div>
