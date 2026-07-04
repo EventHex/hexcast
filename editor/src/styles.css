@@ -25,7 +25,7 @@ main { display: flex; flex: 1; min-height: 0; }
 .player-wrap { background: #000; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 aside { width: 340px; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 aside nav { display: flex; border-bottom: 1px solid var(--line); }
-aside nav button { flex: 1; background: none; border: 0; color: var(--dim); padding: 11px; cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+aside nav button { flex: 1; min-width: 0; background: none; border: 0; color: var(--dim); padding: 11px 6px; cursor: pointer; font: inherit; border-bottom: 2px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 aside nav button.on { color: var(--text); border-bottom-color: var(--accent); }
 .panel-body { padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 

@@ -110,3 +110,38 @@ First-run wizard (over Library): keys → brand quick-setup → footage (extensi
 13. UI i18n (D9); command palette
 
 Non-goals unchanged: desktop app, collaboration/multi-tenant, avatars, cloud.
+
+---
+
+## UX audit round 2 — screenshot-verified (2026-07-04)
+
+Playwright walkthrough of every screen/state (21 screenshots, console/network
+clean: zero JS errors, zero ≥400 responses). Editor core photographs like a
+real product — WYSIWYG player, script cards with footage trim, style panel and
+export modal all read well. The shell and wayfinding are where it breaks.
+
+**Fixed immediately (verified headless):**
+- Esc did not cancel an armed draw tool despite the hint promising it.
+- Right-panel tab nav overflowed the viewport 5px, clipping the ⚙ tab.
+- 800ms autosave debounce could silently drop the last edit on navigation —
+  now flushed with keepalive PUTs on pagehide.
+
+**Confirmed/raised by screenshots (feeds the backlog):**
+- **Timeline has no ruler or track labels** (new, high): three unlabeled
+  tracks; caption chips overflow with no scroll affordance; a zoom block is an
+  anonymous pill. Needs time ruler + track labels (Captions / Zooms / Sounds).
+- **Library variant sprawl** (B6, upgrade to P0-adjacent): real workspace
+  showed `web-139def41`, `web-139def41 (Tamil)`, `web-139def41 (Malayalam)` as
+  unrelated sibling cards — language variants must group under the parent.
+- **Raw ids everywhere** (B3 confirmed): editor header and card titles show
+  `web-…` ids; names must lead.
+- **Settings modal ordering** (D3 detail): API keys — the #1 first-run action —
+  are below Storage; OpenAI base-URL/model fields show even when irrelevant;
+  provider dropdowns assume vendor knowledge (add "recommended" captions).
+- **Downloads affordance** (C1 confirmed): a lone `↓ 16:9` chip bottom-left is
+  the entire output surface.
+- **Onboarding is visually flat** (A1 detail): no logo/brand color, generic
+  copy box — first impression undersells the product.
+- **Export modal jitter** (new, small): cache-hit exports flash 0%→done in
+  milliseconds; when a job finishes <400ms, skip straight to the done state.
+

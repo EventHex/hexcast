@@ -106,6 +106,33 @@ export default function App() {
     return () => p.removeEventListener("frameupdate", onFrame);
   }, [src]);
 
+  // Esc cancels an armed draw tool (the Elements hint promises this)
+  useEffect(() => {
+    if (!drawMode) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { setDrawMode(null); setDrawRect(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawMode]);
+
+  // navigating away inside the 800ms autosave debounce would silently drop the
+  // last edit — flush it with keepalive requests on pagehide
+  const latest = useRef({});
+  latest.current = { pid, cfg, script, dirty };
+  useEffect(() => {
+    const flush = () => {
+      const { pid, cfg, script, dirty } = latest.current;
+      if (!pid || !cfg || !dirty) return;
+      const opts = (b) => ({ method: "PUT", keepalive: true,
+                             headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+      fetch(`/api/projects/${pid}/config`, opts(cfg)).catch(() => {});
+      fetch(`/api/projects/${pid}/script`, opts(script)).catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
   const seekTo = useCallback((t) => {
     playerRef.current?.seekTo(Math.round(t * FPS));
   }, []);
