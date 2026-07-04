@@ -31,10 +31,11 @@ export default function App() {
   const playerRef = useRef(null);
   const stageRef = useRef(null);
   const busy = useRef(false);
+  const editSeq = useRef(0);   // bumped on every edit; auto-render checks it to detect mid-render edits
 
   // edits after the last export make the downloadable files stale
-  const setScriptD = useCallback((v) => { setDirty(true); setScript(v); }, []);
-  const setCfgD = useCallback((v) => { setDirty(true); setCfg(v); }, []);
+  const setScriptD = useCallback((v) => { editSeq.current++; setDirty(true); setScript(v); }, []);
+  const setCfgD = useCallback((v) => { editSeq.current++; setDirty(true); setCfg(v); }, []);
 
   // autosave: every edit persists to the server after a short pause, so
   // nothing is lost on reload and server-side actions never see stale state.
@@ -117,49 +118,78 @@ export default function App() {
 
   const [modal, setModal] = useState(null); // {phase, step, error, minimized}
   const [prog, setProg] = useState(0);
+  const [downloadKey, setDownloadKey] = useState(0);   // cache-bust download links after a render
+  const [autoRender, setAutoRender] = useState(() => localStorage.getItem("remaster_autorender") === "1");
 
-  const run = async (endpoint, label) => {
+  const run = async (endpoint, label, { auto = false } = {}) => {
     if (busy.current) return;
     busy.current = true;
+    const seq0 = editSeq.current;
     setStatus(label + "…");
     setProg(0);
-    setModal({ phase: "running", step: label + "…", minimized: false });
+    setModal({ phase: "running", step: label + "…", minimized: auto });
     try {
       await saveAll();
       const r = await post(`/api/projects/${pid}/${endpoint}`);
       if (r.nothing) {
-        setStatus("Already up to date");
-        setModal({ phase: "done" });
+        setStatus(auto ? "Up to date ✓" : "Already up to date");
+        setModal(auto ? null : { phase: "done" });
         busy.current = false;
         return;
       }
       setJob(r.job);
       const end = await pollJob(r.job, (s) => {
         const step = s.status === "queued" ? "Queued — waiting for a free render slot…" : s.step || s.status;
-        setStatus(step);
+        setStatus((auto ? "Auto-export: " : "") + step);
         setProg(s.progress || 0);
         setModal((m) => (m ? { ...m, step } : m));
       });
       setJob(null);
       if (end === "done") {
-        await load(pid);
-        setVideoKey((k) => k + 1);
-        setDirty(false);
+        setDownloadKey((k) => k + 1);   // point the download links at the fresh files
+        // only clear "dirty" if no edits landed while rendering — else keep it
+        // so auto-render fires again for the newer changes
+        if (editSeq.current === seq0) setDirty(false);
         setProg(1);
-        setStatus("Export complete");
-        setModal({ phase: "done" });
+        if (auto) {
+          // background pass: keep the live preview + playhead untouched, just
+          // refresh the downloadable files quietly
+          setGenerated(true);
+          setStatus("Auto-export complete ✓");
+          setModal(null);
+        } else {
+          await load(pid);
+          setVideoKey((k) => k + 1);
+          setStatus("Export complete");
+          setModal({ phase: "done" });
+        }
       } else {
         const s = await api(`/api/jobs/${r.job}`).catch(() => null);
         const err = (s?.error || "").split("\n").filter(Boolean).pop() || end;
         setStatus(end === "cancelled" ? "Cancelled" : "Failed — " + err);
-        setModal(end === "cancelled" ? { phase: "cancelled" } : { phase: "error", error: err });
+        setModal(end === "cancelled" ? (auto ? null : { phase: "cancelled" })
+                                     : { phase: "error", error: err });
       }
     } catch (e) {
       setStatus("Request failed");
-      setModal({ phase: "error", error: "Request failed — is the server running?" });
+      setModal(auto ? null : { phase: "error", error: "Request failed — is the server running?" });
     }
     busy.current = false;
   };
+
+  // auto-render: after edits settle (and only when idle), run the incremental
+  // export in the background. Reuses the server's stage-diffing, so an SFX-only
+  // change is a fast fx pass — no re-voice. Opt-in; renders are CPU-heavy.
+  const toggleAuto = () => {
+    const v = !autoRender;
+    setAutoRender(v);
+    localStorage.setItem("remaster_autorender", v ? "1" : "0");
+  };
+  useEffect(() => {
+    if (!autoRender || !dirty || job || !pid) return;
+    const id = setTimeout(() => { if (!busy.current) run("export", "Auto-export", { auto: true }); }, 4000);
+    return () => clearTimeout(id);
+  }, [autoRender, dirty, job, cfg, script, pid]);
 
   const cancel = () => job && post(`/api/jobs/${job}/cancel`).catch(() => {});
 
@@ -230,6 +260,9 @@ export default function App() {
           </button>
         )}
         {job && !modal?.minimized && <button className="btn sm danger" onClick={cancel}>Cancel</button>}
+        <label className="chk" title="Auto-render the download files in the background a few seconds after you stop editing. Only the changed stage re-renders (e.g. a sound effect = fast pass, no re-voice).">
+          <input type="checkbox" checked={autoRender} onChange={toggleAuto} /> Auto-render
+        </label>
         <button className="btn" disabled={!!job}
                 title="Renders the final video files. Runs only the stages your edits changed — framing is instant, re-voicing only when the script or voice changed."
                 onClick={() => run("export", "Exporting video")}>⬇ Export video</button>
@@ -260,7 +293,7 @@ export default function App() {
                 <p className="hint">Your videos are ready to download.</p>
                 <div className="row gap" style={{ justifyContent: "center" }}>
                   {(cfg.aspects || ["16x9", "9x16"]).map((a) => (
-                    <a key={a} className="btn" href={`/media/${pid}/framed-${a}.mp4`} download>
+                    <a key={a} className="btn" href={`/media/${pid}/framed-${a}.mp4?v=${downloadKey}`} download>
                       ⬇ {a.replace("x", ":")}
                     </a>
                   ))}
@@ -337,11 +370,13 @@ export default function App() {
           {generated && (
             <div className="downloads">
               {(cfg.aspects || ["16x9", "9x16"]).map((a) => (
-                <a key={a} className={dirty ? "stale" : ""} href={`/media/${pid}/framed-${a}.mp4`} download>
+                <a key={a} className={dirty ? "stale" : ""} href={`/media/${pid}/framed-${a}.mp4?v=${downloadKey}`} download>
                   ↓ {a.replace("x", ":")}
                 </a>
               ))}
-              {dirty && <span className="stalehint">edited since last export — press “Export video” to refresh</span>}
+              {dirty && <span className="stalehint">
+                {autoRender ? "auto-rendering…" : "edited since last export — press “Export video” to refresh"}
+              </span>}
             </div>
           )}
         </section>
