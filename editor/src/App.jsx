@@ -163,6 +163,8 @@ export default function App() {
   const [autoRender, setAutoRender] = useState(() => localStorage.getItem("remaster_autorender") === "1");
   const [editingName, setEditingName] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
+  const [coach, setCoach] = useState(() => !localStorage.getItem("remaster_coached"));
+  const dismissCoach = () => { localStorage.setItem("remaster_coached", "1"); setCoach(false); };
 
   const commitName = async (name) => {
     setEditingName(false);
@@ -368,6 +370,19 @@ export default function App() {
       {showPublish && (
         <PublishDrawer pid={pid} cfg={cfg} downloadKey={downloadKey}
                        onClose={() => setShowPublish(false)} setStatus={setStatus} />
+      )}
+
+      {coach && src && (
+        <div className="coach">
+          <div className="coach-head"><b>Quick start</b><button className="mini" onClick={dismissCoach}>×</button></div>
+          <ol>
+            <li><b>Script</b> — edit any line; the voice re-renders to match.</li>
+            <li><b>Zooms</b> — add or drag zoom blocks on the timeline.</li>
+            <li><b>Style</b> — pick a brand or preset; tweak cards & captions.</li>
+            <li><b>Export</b> — render 16:9 / 9:16, or Publish for captions & languages.</li>
+          </ol>
+          <button className="btn sm wide" onClick={dismissCoach}>Got it</button>
+        </div>
       )}
 
       {modal && !modal.minimized && (

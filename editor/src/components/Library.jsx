@@ -20,10 +20,12 @@ export function Library({ onChange }) {
   const [sort, setSort] = useState("recent");
   const [filter, setFilter] = useState("all");
   const [hasSample, setHasSample] = useState(false);
+  const [extSeen, setExtSeen] = useState(true);
+  const [extDismissed, setExtDismissed] = useState(() => localStorage.getItem("remaster_ext_dismissed") === "1");
   const fileRef = useRef(null);
 
   const refresh = () => api("/api/projects").then((r) => { setProjects(r.projects || []); onChange?.(); }).catch(() => setProjects([]));
-  useEffect(() => { refresh(); api("/api/health").then((h) => setHasSample(!!h.has_sample)).catch(() => {}); }, []);
+  useEffect(() => { refresh(); api("/api/health").then((h) => { setHasSample(!!h.has_sample); setExtSeen(!!h.extension_seen); }).catch(() => {}); }, []);
   const trySample = async () => { const { id } = await post("/api/sample"); open(id); };
 
   const open = (id) => { location.href = `/editor/?project=${id}`; };
@@ -106,6 +108,14 @@ export function Library({ onChange }) {
         <button className="btn" disabled={busy} onClick={() => fileRef.current.click()}>{busy ? "Uploading…" : "＋ New video"}</button>
       </div>
       <div className="page-body">
+        {!extSeen && !extDismissed && (
+          <div className="banner">
+            <span>🧩 Install the Remaster recorder extension to capture a tab + your mic straight into the Library.</span>
+            <span className="grow" />
+            <a className="btn sm ghost" href="https://github.com" target="_blank" rel="noreferrer">Get it</a>
+            <button className="mini" onClick={() => { localStorage.setItem("remaster_ext_dismissed", "1"); setExtDismissed(true); }}>×</button>
+          </div>
+        )}
         {projects == null && <p className="hint">Loading…</p>}
         {projects?.length === 0 && (
           <div className="empty">
