@@ -6,6 +6,7 @@ import { ZoomPanel } from "./components/ZoomPanel.jsx";
 import { StylePanel } from "./components/StylePanel.jsx";
 import { AudioPanel } from "./components/AudioPanel.jsx";
 import { ElementsPanel } from "./components/ElementsPanel.jsx";
+import { PublishDrawer } from "./components/PublishDrawer.jsx";
 import { Shell } from "./components/Shell.jsx";
 import { Timeline } from "./components/Timeline.jsx";
 import { api, jput, post, pollJob } from "./api.js";
@@ -146,6 +147,16 @@ export default function App() {
   const [prog, setProg] = useState(0);
   const [downloadKey, setDownloadKey] = useState(0);   // cache-bust download links after a render
   const [autoRender, setAutoRender] = useState(() => localStorage.getItem("remaster_autorender") === "1");
+  const [editingName, setEditingName] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
+
+  const commitName = async (name) => {
+    setEditingName(false);
+    const n = (name || "").trim();
+    if (!n || n === (cfg?.name || pid)) return;
+    setCfg((c) => ({ ...c, name: n }));
+    try { await jput(`/api/projects/${pid}/name`, { name: n }); } catch {}
+  };
 
   const run = async (endpoint, label, { auto = false } = {}) => {
     if (busy.current) return;
@@ -275,8 +286,14 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <span className="brand">Remaster <em>editor</em></span>
-        <span className="pid">{pid}</span>
+        <a className="crumb" href="/editor/" title="Back to Library">←</a>
+        {editingName ? (
+          <input className="nameedit" autoFocus defaultValue={cfg.name || pid}
+                 onBlur={(e) => commitName(e.target.value)}
+                 onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") setEditingName(false); }} />
+        ) : (
+          <span className="projname" title="Click to rename" onClick={() => setEditingName(true)}>{cfg.name || pid}</span>
+        )}
         <span className="grow" />
         <span className="status">{status}</span>
         {modal?.phase === "running" && modal.minimized && (
@@ -292,8 +309,13 @@ export default function App() {
         <button className="btn" disabled={!!job}
                 title="Renders the final video files. Runs only the stages your edits changed — framing is instant, re-voicing only when the script or voice changed."
                 onClick={() => run("export", "Exporting video")}>⬇ Export video</button>
-        <a className="btn sm ghost" href="/editor/">Library</a>
+        <button className="btn sm ghost" onClick={() => setShowPublish(true)}>Publish ▾</button>
       </header>
+
+      {showPublish && (
+        <PublishDrawer pid={pid} cfg={cfg} downloadKey={downloadKey}
+                       onClose={() => setShowPublish(false)} setStatus={setStatus} />
+      )}
 
       {modal && !modal.minimized && (
         <div className="modal-wrap">

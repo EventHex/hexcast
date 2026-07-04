@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { api, jput, post, pollJob } from "../api.js";
+import { api, jput, post } from "../api.js";
 
 export const LANGS = [
   { n: "English (India)", t: "English", v: "en-IN-Chirp3-HD-Aoede" },
@@ -47,28 +47,6 @@ const EN_VOICES = {
 const ALL_EN = Object.values(EN_VOICES).flat().map(([v]) => v);
 
 export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked, setStatus }) {
-  const [batchLangs, setBatchLangs] = useState([]);
-  const [batchBusy, setBatchBusy] = useState(false);
-  const toggleBatchLang = (t) =>
-    setBatchLangs((ls) => (ls.includes(t) ? ls.filter((x) => x !== t) : [...ls, t]));
-  const runBatch = async () => {
-    if (!batchLangs.length || batchBusy) return;
-    setBatchBusy(true);
-    try {
-      const r = await fetch(`/api/projects/${pid}/export-langs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ langs: batchLangs }),
-      }).then((x) => { if (!x.ok) throw new Error(x.status); return x.json(); });
-      const end = await pollJob(r.job, (s) =>
-        setStatus?.(s.status === "queued" ? "Batch queued…" : `Batch: ${s.step || s.status}`));
-      setStatus?.(end === "done"
-        ? `Batch done — ${batchLangs.length} language version(s) in the Library`
-        : `Batch ${end}`);
-    } catch {
-      setStatus?.("Batch export failed to start");
-    }
-    setBatchBusy(false);
-  };
   const [tracks, setTracks] = useState([]);
   const [sfxLib, setSfxLib] = useState([]);
   const [playing, setPlaying] = useState(null);
@@ -284,22 +262,6 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
         </div>
       ))}
       {!sounds.length && <p className="hint">Placed sounds appear here and on the bottom timeline track — drag them there to move.</p>}
-
-      <hr className="sep" />
-      <span className="eyebrow">Translate &amp; export other languages</span>
-      <p className="hint">Each language renders as its own project in the Library — same edits, translated narration, native voice.</p>
-      <div className="row gap wrap">
-        {LANGS.filter((x) => x.t !== (cfg.lang || "English"))
-              .filter((x, i, a) => a.findIndex((y) => y.t === x.t) === i)
-              .map((x) => (
-          <label className="chk" key={x.t}>
-            <input type="checkbox" checked={batchLangs.includes(x.t)} onChange={() => toggleBatchLang(x.t)} /> {x.t}
-          </label>
-        ))}
-      </div>
-      <button className="btn sm wide" disabled={!batchLangs.length || batchBusy} onClick={runBatch}>
-        {batchBusy ? "Rendering languages…" : `⬇ Export in ${batchLangs.length || "N"} language(s)`}
-      </button>
 
       <hr className="sep" />
       <span className="eyebrow">Automatic effects</span>

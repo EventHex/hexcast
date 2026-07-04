@@ -19,10 +19,12 @@ export function Library({ onChange }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("recent");
   const [filter, setFilter] = useState("all");
+  const [hasSample, setHasSample] = useState(false);
   const fileRef = useRef(null);
 
   const refresh = () => api("/api/projects").then((r) => { setProjects(r.projects || []); onChange?.(); }).catch(() => setProjects([]));
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); api("/api/health").then((h) => setHasSample(!!h.has_sample)).catch(() => {}); }, []);
+  const trySample = async () => { const { id } = await post("/api/sample"); open(id); };
 
   const open = (id) => { location.href = `/editor/?project=${id}`; };
   const newFromFile = async (e) => {
@@ -109,7 +111,10 @@ export function Library({ onChange }) {
           <div className="empty">
             <p className="hint">No videos yet.</p>
             <p className="hint">Upload a screen recording, or record one with the Remaster recorder extension — it lands here automatically.</p>
-            <button className="btn" disabled={busy} onClick={() => fileRef.current.click()}>＋ New video</button>
+            <div className="row gap">
+              <button className="btn" disabled={busy} onClick={() => fileRef.current.click()}>＋ New video</button>
+              {hasSample && <button className="btn ghost" onClick={trySample}>Try the sample</button>}
+            </div>
           </div>
         )}
         <div className="pgrid">

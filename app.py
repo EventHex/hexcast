@@ -698,10 +698,29 @@ def render(pid: str):
     ])
 
 
+_SAMPLE_DIR = os.path.join(HERE, "assets", "sample")   # optional bundled starter project
+
+
 @app.get("/api/health")
 def health():
     import time as _t
-    return {"version": VERSION, "extension_seen": (_t.time() - _EXT_SEEN["at"]) < 120}
+    return {"version": VERSION,
+            "extension_seen": (_t.time() - _EXT_SEEN["at"]) < 120,
+            "has_sample": os.path.isdir(_SAMPLE_DIR)}
+
+
+@app.post("/api/sample")
+def make_sample():
+    """Clone the bundled sample into a new project so a first-time user has
+    something to open immediately. No-op (404) if no sample ships."""
+    if not os.path.isdir(_SAMPLE_DIR):
+        raise HTTPException(404, "no bundled sample")
+    import shutil
+    pid = "sample-" + uuid.uuid4().hex[:6]
+    d = os.path.join(PROJECTS, pid)
+    shutil.copytree(_SAMPLE_DIR, d)
+    c = cfgmod.load(d); c["name"] = "Sample demo"; cfgmod.save(d, c)
+    return {"id": pid}
 
 
 @app.get("/api/brands")
@@ -855,6 +874,119 @@ def get_config(pid: str):
 @app.put("/api/projects/{pid}/config")
 def put_config(pid: str, body: dict = Body(...)):
     return cfgmod.save(proj_dir(pid), body)
+
+
+def _caption_cues(d):
+    """Timed narration cues from script.json (rstart + duration), for SRT/VTT."""
+    sp = os.path.join(d, "script.json")
+    if not os.path.exists(sp):
+        return []
+    segs = json.load(open(sp, encoding="utf-8")).get("segments") or []
+    cues = []
+    for s in segs:
+        if s.get("type") == "scene" or s.get("rstart") is None or not s.get("en"):
+            continue
+        start = float(s["rstart"])
+        dur = float(s.get("rdur") or s.get("tts_dur") or 0) or 2.0
+        cues.append((start, start + dur, s["en"].strip()))
+    return cues
+
+
+def _ts(t, sep):
+    h = int(t // 3600); m = int((t % 3600) // 60); s = t % 60
+    return f"{h:02d}:{m:02d}:{s:06.3f}".replace(".", sep)
+
+
+@app.get("/api/projects/{pid}/captions.{ext}")
+def captions(pid: str, ext: str):
+    d = proj_dir(pid)
+    cues = _caption_cues(d)
+    if ext == "vtt":
+        body = "WEBVTT\n\n" + "\n\n".join(
+            f"{_ts(a, '.')} --> {_ts(b, '.')}\n{t}" for a, b, t in cues)
+        media = "text/vtt"
+    else:  # srt
+        body = "\n\n".join(
+            f"{i+1}\n{_ts(a, ',')} --> {_ts(b, ',')}\n{t}" for i, (a, b, t) in enumerate(cues))
+        media = "application/x-subrip"
+    from fastapi.responses import Response
+    return Response(body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{pid}.{ext}"'})
+
+
+@app.get("/api/projects/{pid}/transcript.txt")
+def transcript(pid: str):
+    d = proj_dir(pid)
+    sp = os.path.join(d, "script.json")
+    segs = json.load(open(sp, encoding="utf-8")).get("segments") or [] if os.path.exists(sp) else []
+    lines = []
+    for s in segs:
+        if s.get("type") == "scene":
+            lines.append(f"\n## {s.get('title', '')}\n")
+        elif s.get("en"):
+            lines.append(s["en"].strip())
+    from fastapi.responses import Response
+    return Response("\n".join(lines).strip() + "\n", media_type="text/plain",
+                    headers={"Content-Disposition": f'attachment; filename="{pid}.txt"'})
+
+
+@app.get("/api/projects/{pid}/audio.mp3")
+def audio_only(pid: str):
+    """Narration-only MP3, extracted from the rendered video."""
+    d = proj_dir(pid)
+    src = next((os.path.join(d, f) for f in ("framed-16x9.mp4", "revoiced.mp4")
+                if os.path.exists(os.path.join(d, f))), None)
+    if not src:
+        raise HTTPException(404, "render first")
+    out = os.path.join(d, "narration.mp3")
+    if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(src):
+        subprocess.run(["ffmpeg", "-y", "-i", src, "-vn", "-c:a", "libmp3lame", "-q:a", "2", out],
+                       capture_output=True)
+    if not os.path.exists(out):
+        raise HTTPException(500, "audio extract failed")
+    return FileResponse(out, filename=f"{pid}.mp3")
+
+
+@app.get("/api/projects/{pid}/poster.png")
+def poster(pid: str):
+    """A shareable thumbnail — a frame from the exported video."""
+    d = proj_dir(pid)
+    src = next((os.path.join(d, f) for f in ("framed-16x9.mp4", "framed-9x16.mp4", "framed-1x1.mp4")
+                if os.path.exists(os.path.join(d, f))), None)
+    if not src:
+        raise HTTPException(404, "export first")
+    out = os.path.join(d, "poster.png")
+    subprocess.run(["ffmpeg", "-y", "-ss", "1.2", "-i", src, "-frames:v", "1", out], capture_output=True)
+    if not os.path.exists(out):
+        raise HTTPException(500, "poster failed")
+    return FileResponse(out, filename=f"{pid}-poster.png")
+
+
+@app.post("/api/projects/{pid}/reveal")
+def reveal(pid: str):
+    """Open the project's export in the OS file browser (macOS/Linux)."""
+    d = proj_dir(pid)
+    target = next((os.path.join(d, f"framed-{a}.mp4") for a in ("16x9", "9x16", "1x1")
+                   if os.path.exists(os.path.join(d, f"framed-{a}.mp4"))), d)
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", target])
+    elif sys.platform.startswith("linux"):
+        subprocess.Popen(["xdg-open", os.path.dirname(target)])
+    else:
+        raise HTTPException(400, "unsupported platform")
+    return {"ok": True}
+
+
+@app.get("/api/projects/{pid}/outputs")
+def outputs(pid: str):
+    """What's been produced — drives the Publish drawer."""
+    d = proj_dir(pid)
+    cfg = cfgmod.load(d)
+    aspects = [a for a in (cfg.get("aspects") or ["16x9"]) if os.path.exists(os.path.join(d, f"framed-{a}.mp4"))]
+    return {"aspects": aspects,
+            "has_render": bool(aspects),
+            "has_script": os.path.exists(os.path.join(d, "script.json")),
+            "platform": sys.platform}
 
 
 @app.get("/media/{pid}/{name:path}")
