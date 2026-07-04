@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, post } from "../api.js";
+import { SettingsPanel } from "./SettingsPanel.jsx";
 
 // Home screen: every project in the workspace. Upload here (or record with
-// the extension) and jump into the editor.
+// the extension) and jump into the editor. Settings (keys/providers) live at
+// the workspace level — reachable here, not buried inside a project.
 
 const STATUS = {
   exported: ["Exported", "#34d8c9"],
@@ -17,11 +19,26 @@ const fmtDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { month:
 export function Library() {
   const [projects, setProjects] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [anyKey, setAnyKey] = useState(null);   // null=unknown, else bool
+  const [onboard, setOnboard] = useState(false);
   const fileRef = useRef(null);
 
   const refresh = () => api("/api/projects").then((r) => setProjects(r.projects || [])).catch(() => setProjects([]));
-  useEffect(() => { refresh(); }, []);
+  const loadKeys = () => api("/api/settings")
+    .then((v) => setAnyKey(Object.values(v.keys || {}).some((k) => k.set)))
+    .catch(() => setAnyKey(false));
+  useEffect(() => { refresh(); loadKeys(); }, []);
 
+  // first run: no projects yet and setup never dismissed -> show onboarding
+  useEffect(() => {
+    if (projects && projects.length === 0 && anyKey != null &&
+        !localStorage.getItem("remaster_onboarded")) {
+      setOnboard(true);
+    }
+  }, [projects, anyKey]);
+
+  const dismissOnboard = () => { localStorage.setItem("remaster_onboarded", "1"); setOnboard(false); };
   const open = (id) => { location.href = `/editor/?project=${id}`; };
 
   const newFromFile = async (e) => {
@@ -58,11 +75,15 @@ export function Library() {
       <header>
         <span className="brand">Remaster</span>
         <span className="grow" />
+        <button className="btn sm ghost" onClick={() => setShowSettings(true)}>
+          ⚙ Settings{anyKey === false ? " · no keys" : ""}
+        </button>
         <input ref={fileRef} type="file" accept="video/*,.webm,.mp4,.mov,.mkv" hidden onChange={newFromFile} />
         <button className="btn" disabled={busy} onClick={() => fileRef.current.click()}>
           {busy ? "Uploading…" : "＋ New video"}
         </button>
       </header>
+
       <div style={{ padding: "18px 22px", overflowY: "auto" }}>
         <p className="hint" style={{ marginTop: 0 }}>
           Upload a screen recording, or record one with the Remaster recorder extension — it lands here automatically.
@@ -102,6 +123,43 @@ export function Library() {
           })}
         </div>
       </div>
+
+      {onboard && (
+        <div className="modal-wrap">
+          <div className="modal" style={{ maxWidth: 460, textAlign: "left" }}>
+            <h3>Welcome to Remaster 👋</h3>
+            <p className="hint">
+              Turn a raw screen recording into a polished, revoiced, brand-framed demo video —
+              on your machine, with your own keys.
+            </p>
+            <p className="hint" style={{ marginTop: 10 }}>
+              <b>Works with zero keys</b> right now: local transcription, your own recorded
+              voice, click-driven zooms. Add API keys once (they’re shared across every project)
+              to unlock AI voices, script cleanup and AI zoom targeting.
+            </p>
+            <div className="row gap" style={{ justifyContent: "flex-end", marginTop: 14 }}>
+              <button className="btn sm ghost" onClick={dismissOnboard}>Start key-free</button>
+              <button className="btn sm" onClick={() => { dismissOnboard(); setShowSettings(true); }}>
+                Add API keys →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSettings && (
+        <div className="modal-wrap" onClick={(e) => e.target === e.currentTarget && setShowSettings(false)}>
+          <div className="modal" style={{ maxWidth: 460, maxHeight: "88vh", overflowY: "auto", textAlign: "left" }}>
+            <div className="row gap" style={{ alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>Workspace settings</h3>
+              <span className="grow" />
+              <button className="mini" onClick={() => { setShowSettings(false); loadKeys(); }}>×</button>
+            </div>
+            <p className="hint">Keys and provider choices apply to every project in this workspace.</p>
+            <SettingsPanel setStatus={() => {}} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
