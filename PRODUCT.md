@@ -1,5 +1,17 @@
 # Remaster — Product Gap Analysis & Target IA (2026-07-04)
 
+> **BUILT 2026-07-04 — the P0/P1/P2 backlog below is implemented.** App shell
+> (Library/Brands/Settings/Help + stats + ⌘K palette), Brands screen with live
+> preview, tabbed Settings (Providers&Keys / Workspace / About), first-run
+> wizard, editor breadcrumb + inline rename, Publish drawer (video / SRT+VTT /
+> transcript / MP3 / thumbnail / GIF / **step-by-step SOP doc** / batch
+> languages / reveal-in-Finder), timeline ruler + track labels, library
+> search/sort/filter + variant grouping, undo/redo + keyboard shortcuts, job
+> retry + log viewer, extension-detection CTA + coach marks. Deferred to launch:
+> YouTube/Drive OAuth upload (C6), UI i18n (D9). Verified via Playwright
+> screenshot passes (zero console/network errors).
+
+
 The pipeline and editor are strong; the *product shell* around them is thin.
 This doc lists every gap between "a working editor" and "a clean product",
 organized by user journey, then defines the target screens/menus and a
