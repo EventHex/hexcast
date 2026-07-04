@@ -23,6 +23,9 @@ import config as cfgmod
 import brands as brandsmod
 from providers import settings as settingsmod
 
+VERSION = "0.1.0"
+_EXT_SEEN = {"at": 0.0}   # last time the recorder extension pinged us
+
 app = FastAPI(title="Remaster")
 
 
@@ -458,10 +461,21 @@ def rewrite_script(pid: str):
 @app.post("/api/projects/{pid}/events")
 async def upload_events(pid: str, body: dict = Body(...)):
     """Interaction event track from the recorder extension (clicks drive zoom)."""
+    import time as _t
+    _EXT_SEEN["at"] = _t.time()
     d = proj_dir(pid)
     json.dump(body, open(os.path.join(d, "events.json"), "w", encoding="utf-8"))
     n = len(body.get("events") or [])
     return {"ok": True, "events": n}
+
+
+@app.get("/api/ping")
+def ext_ping():
+    """Lightweight endpoint the recorder extension can hit so the app knows
+    it's installed (drives the 'extension detected' hint)."""
+    import time as _t
+    _EXT_SEEN["at"] = _t.time()
+    return {"ok": True, "version": VERSION}
 
 
 import hashlib
@@ -684,9 +698,51 @@ def render(pid: str):
     ])
 
 
+@app.get("/api/health")
+def health():
+    import time as _t
+    return {"version": VERSION, "extension_seen": (_t.time() - _EXT_SEEN["at"]) < 120}
+
+
 @app.get("/api/brands")
 def brands_list():
     return {"brands": brandsmod.list_brands(PROJECTS)}
+
+
+@app.get("/api/brands/{bid}")
+def brands_get(bid: str):
+    try:
+        return brandsmod.get_brand(PROJECTS, bid)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404, "no such brand")
+
+
+@app.post("/api/brands/{bid}/logo")
+async def brand_logo(bid: str, file: UploadFile = File(...)):
+    try:
+        d = brandsmod._bdir(PROJECTS, bid)
+    except ValueError:
+        raise HTTPException(400, "bad brand id")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "logo.png")
+    with open(path, "wb") as f:
+        f.write(await file.read())
+    b = brandsmod.get_brand(PROJECTS, bid)
+    cfg = b.get("config") or {}
+    cfg["logo"] = path
+    brandsmod.save_brand(PROJECTS, bid, b.get("name"), cfg)
+    return {"ok": True, "logo": path}
+
+
+@app.get("/api/brands/{bid}/logo")
+def brand_logo_get(bid: str):
+    try:
+        p = os.path.join(brandsmod._bdir(PROJECTS, bid), "logo.png")
+    except ValueError:
+        raise HTTPException(400, "bad brand id")
+    if not os.path.isfile(p):
+        raise HTTPException(404, "no logo")
+    return FileResponse(p)
 
 
 @app.post("/api/brands")

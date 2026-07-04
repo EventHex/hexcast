@@ -31,10 +31,14 @@ DEFAULTS = {
     "vision": {"provider": "auto"},                 # auto | cerebras | gemini | none
     "tts": {"provider": "auto"},                    # auto | google | elevenlabs | piper | original
     "retention": {"days": 0},                       # >0: auto-prune heavy intermediates older than N days
+    # workspace profile — new projects & brands prefill from these
+    "workspace": {"company": "", "website": "",
+                  "default_lang": "English", "default_voice": "en-IN-Chirp3-HD-Aoede",
+                  "default_aspects": "16x9"},        # comma-joined aspect list
     "keys": {k: "" for k in KEY_ENV},
 }
 
-SECTIONS = ("stt", "llm", "vision", "tts", "retention")
+SECTIONS = ("stt", "llm", "vision", "tts", "retention", "workspace")
 
 
 def _path(data_dir):

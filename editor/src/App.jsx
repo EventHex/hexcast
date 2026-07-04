@@ -6,8 +6,7 @@ import { ZoomPanel } from "./components/ZoomPanel.jsx";
 import { StylePanel } from "./components/StylePanel.jsx";
 import { AudioPanel } from "./components/AudioPanel.jsx";
 import { ElementsPanel } from "./components/ElementsPanel.jsx";
-import { SettingsPanel } from "./components/SettingsPanel.jsx";
-import { Library } from "./components/Library.jsx";
+import { Shell } from "./components/Shell.jsx";
 import { Timeline } from "./components/Timeline.jsx";
 import { api, jput, post, pollJob } from "./api.js";
 
@@ -221,7 +220,7 @@ export default function App() {
   const cancel = () => job && post(`/api/jobs/${job}/cancel`).catch(() => {});
 
   if (noProject) {
-    return <Library />;
+    return <Shell />;
   }
   if (!cfg || !src) {
     return <div className="boot">{status}</div>;
@@ -410,9 +409,9 @@ export default function App() {
 
         <aside>
           <nav>
-            {["script", "zooms", "elements", "audio", "style", "settings"].map((t) => (
+            {["script", "zooms", "elements", "audio", "style"].map((t) => (
               <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-                {t === "settings" ? "⚙" : t[0].toUpperCase() + t.slice(1)}
+                {t[0].toUpperCase() + t.slice(1)}
               </button>
             ))}
           </nav>
@@ -431,7 +430,6 @@ export default function App() {
                         playheadBaked={playheadBaked} setStatus={setStatus} />
           )}
           {tab === "style" && <StylePanel pid={pid} cfg={cfg} setCfg={setCfgD} />}
-          {tab === "settings" && <SettingsPanel setStatus={setStatus} />}
         </aside>
       </main>
     </div>
