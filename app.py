@@ -38,6 +38,19 @@ def _reap_orphans():
     brandsmod.seed_default(PROJECTS, os.path.join(HERE, "assets"))
 # Allow the Chrome extension (chrome-extension://) to hand recordings straight in.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def _no_cache_html(request, call_next):
+    """Never cache the HTML document. Vite hashes asset filenames per build, so
+    a browser-cached index.html can point at a deleted CSS/JS after a rebuild
+    (→ unstyled page). Hashed assets stay immutably cacheable; only the entry
+    HTML is revalidated so it always references the current hashes."""
+    resp = await call_next(request)
+    ct = resp.headers.get("content-type", "")
+    if ct.startswith("text/html"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
 app.mount("/assets", StaticFiles(directory=os.path.join(HERE, "assets")), name="assets")
 _EDITOR_DIST = os.path.join(HERE, "editor", "dist")
 if os.path.isdir(_EDITOR_DIST):
