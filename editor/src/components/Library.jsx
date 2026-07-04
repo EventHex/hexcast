@@ -22,6 +22,7 @@ export function Library({ onChange }) {
   const [hasSample, setHasSample] = useState(false);
   const [extSeen, setExtSeen] = useState(true);
   const [extDismissed, setExtDismissed] = useState(() => localStorage.getItem("remaster_ext_dismissed") === "1");
+  const [expanded, setExpanded] = useState(new Set());
   const fileRef = useRef(null);
 
   const refresh = () => api("/api/projects").then((r) => { setProjects(r.projects || []); onChange?.(); }).catch(() => setProjects([]));
@@ -71,11 +72,19 @@ export function Library({ onChange }) {
 
   const card = (p, isVariant) => {
     const [label, color] = STATUS[p.status] || STATUS.empty;
+    const nv = p.variants?.length || 0;
+    const isOpen = expanded.has(p.id);
     return (
       <div key={p.id} className={`pcard ${isVariant ? "variant" : ""}`} onClick={() => open(p.id)}>
         <div className="pcard-thumb">
           <img src={`/api/projects/${p.id}/thumb`} alt="" onError={(e) => { e.target.style.display = "none"; }} />
           <span className="pcard-badge" style={{ background: color }}>{label}</span>
+          {nv > 0 && (
+            <button className="pcard-langs" title="Language versions"
+                    onClick={(e) => { e.stopPropagation(); setExpanded((s) => { const n = new Set(s); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; }); }}>
+              🌐 {nv} {isOpen ? "▴" : "▾"}
+            </button>
+          )}
         </div>
         <div className="pcard-meta">
           <div className="pcard-name">{p.name}</div>
@@ -128,14 +137,14 @@ export function Library({ onChange }) {
           </div>
         )}
         <div className="pgrid">
-          {groups.map((p) => (
-            p.variants.length
-              ? <div key={p.id} className="pgroup">
-                  {card(p)}
-                  <div className="pgroup-variants">{p.variants.map((v) => card(v, true))}</div>
-                </div>
-              : card(p)
-          ))}
+          {groups.map((p) => [
+            card(p),
+            p.variants.length > 0 && expanded.has(p.id) && (
+              <div key={p.id + "-vars"} className="variant-strip">
+                {p.variants.map((vp) => card(vp, true))}
+              </div>
+            ),
+          ])}
         </div>
       </div>
     </div>
