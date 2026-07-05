@@ -335,3 +335,15 @@ kbd { background: var(--panel2); border: 1px solid var(--line-strong); border-ra
 .menu-id b { color: var(--text); font-size: 13px; } .menu-id span { color: var(--dim); font-size: 12px; }
 .menu-pop button { text-align: left; background: none; border: 0; color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
 .menu-pop button:hover { background: var(--panel2); }
+
+/* --- native screen recording --- */
+.modal .field { width: 100%; display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.modal .field > .hint { font-weight: 600; }
+.modal .row { width: 100%; }
+.rec-bar { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 12px; min-width: 300px; padding: 10px 12px 10px 16px;
+  background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px;
+  box-shadow: var(--shadow); font: 600 13px var(--sans); color: var(--text); }
+.rec-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--bad); animation: recpulse 1.2s ease-in-out infinite; }
+@keyframes recpulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }

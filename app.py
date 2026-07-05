@@ -1026,6 +1026,64 @@ def process(pid: str):
     ])
 
 
+# ---- native screen recording (the point of the desktop app) --------------
+# One capture at a time per machine (ffmpeg avfoundation). Records straight
+# into a fresh project so the user goes record -> process with no upload step.
+_REC: dict = {}   # {"pid": ...} for the in-flight recording
+
+
+@app.get("/api/record/devices")
+def record_devices():
+    import recording
+    try:
+        dev = recording.list_devices()
+    except Exception as e:
+        raise HTTPException(500, f"cannot list capture devices: {e}")
+    return {"recording": recording.is_recording(),
+            "elapsed": recording.elapsed(), **dev}
+
+
+@app.post("/api/record/start")
+def record_start(body: dict = Body(...)):
+    import recording
+    if recording.is_recording():
+        raise HTTPException(409, "already recording")
+    try:
+        screen = int(body.get("screen_index"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "screen_index required")
+    mic = body.get("mic_index")
+    mic = int(mic) if mic not in (None, "", "none") else None
+    fps = int(body.get("fps") or 30)
+    pid = "rec-" + uuid.uuid4().hex[:8]
+    d = os.path.join(_data(), pid)
+    os.makedirs(d, exist_ok=True)
+    cfgmod.save(d, {"name": "Screen recording"})
+    raw_path = os.path.join(d, "raw.mp4")
+    try:
+        recording.start(raw_path, screen, mic, fps)
+    except Exception as e:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+        raise HTTPException(400, str(e))
+    _REC["pid"] = pid
+    return {"id": pid}
+
+
+@app.post("/api/record/stop")
+def record_stop():
+    import recording
+    res = recording.stop()
+    pid = _REC.pop("pid", None)
+    if not res or not pid:
+        raise HTTPException(400, "not recording")
+    if not res.get("ok"):
+        import shutil
+        shutil.rmtree(os.path.join(_data(), pid), ignore_errors=True)
+        raise HTTPException(500, "recording produced no video — check Screen Recording permission")
+    return {"id": pid, "raw": "raw.mp4"}
+
+
 _SAMPLE_DIR = os.path.join(HERE, "assets", "sample")   # optional bundled starter project
 
 

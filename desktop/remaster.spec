@@ -23,6 +23,7 @@ datas = [
     (os.path.join(ROOT, "app.py"), "."),
     (os.path.join(ROOT, "auth.py"), "."),
     (os.path.join(ROOT, "brands.py"), "."),
+    (os.path.join(ROOT, "recording.py"), "."),
     (os.path.join(ROOT, "providers"), "providers"),
     (os.path.join(ROOT, "tools"), "tools"),
     (os.path.join(ROOT, "pipeline"), "pipeline"),
@@ -36,7 +37,7 @@ hiddenimports = [
     "uvicorn.protocols.websockets.auto", "uvicorn.protocols.websockets.websockets_impl",
     "fastapi", "starlette", "dotenv", "multipart", "PIL", "requests",
     # app + pipeline modules imported dynamically / via sys.path
-    "app", "auth", "brands", "config", "cerebras_clean", "zoom_decide",
+    "app", "auth", "brands", "recording", "config", "cerebras_clean", "zoom_decide",
     "timeline_fx", "fonts", "events_zoom",
     # native desktop window (pywebview + macOS WebKit backend)
     "webview", "webview.platforms.cocoa", "bottle", "proxy_tools",

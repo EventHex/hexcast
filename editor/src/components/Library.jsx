@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { api, post } from "../api.js";
+import { api, post, postJson } from "../api.js";
 
 // Library view (inside the shell). Project grid with search/sort/filter, a
-// New-video upload, and per-card actions. Language variants group under parent.
+// New-video upload, native screen recording, and per-card actions. Language
+// variants group under their parent card.
 
 const STATUS = {
   exported: ["Exported", "var(--ok)"],
@@ -12,6 +13,7 @@ const STATUS = {
 };
 const fmtSize = (b) => (b > 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.max(1, Math.round(b / 1e6)) + " MB");
 const fmtDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const fmtClock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 export function Library({ onChange }) {
   const [projects, setProjects] = useState(null);
@@ -20,13 +22,19 @@ export function Library({ onChange }) {
   const [sort, setSort] = useState("recent");
   const [filter, setFilter] = useState("all");
   const [hasSample, setHasSample] = useState(false);
-  const [extSeen, setExtSeen] = useState(true);
-  const [extDismissed, setExtDismissed] = useState(() => localStorage.getItem("remaster_ext_dismissed") === "1");
   const [expanded, setExpanded] = useState(new Set());
   const fileRef = useRef(null);
 
+  // native screen recording
+  const [recModal, setRecModal] = useState(false);   // device-picker open
+  const [devices, setDevices] = useState(null);       // {screens,mics} | {error}
+  const [screenIdx, setScreenIdx] = useState(null);
+  const [micIdx, setMicIdx] = useState(null);
+  const [rec, setRec] = useState(null);               // {pid} while capturing
+  const [elapsed, setElapsed] = useState(0);
+
   const refresh = () => api("/api/projects").then((r) => { setProjects(r.projects || []); onChange?.(); }).catch(() => setProjects([]));
-  useEffect(() => { refresh(); api("/api/health").then((h) => { setHasSample(!!h.has_sample); setExtSeen(!!h.extension_seen); }).catch(() => {}); }, []);
+  useEffect(() => { refresh(); api("/api/health").then((h) => setHasSample(!!h.has_sample)).catch(() => {}); }, []);
   const trySample = async () => { const { id } = await post("/api/sample"); open(id); };
 
   const open = (id) => { location.href = `/editor/?project=${id}`; };
@@ -40,6 +48,40 @@ export function Library({ onChange }) {
       open(id);
     } catch { setBusy(false); }
   };
+
+  // --- recording -----------------------------------------------------------
+  const openRecorder = async () => {
+    setRecModal(true); setDevices(null);
+    try {
+      const d = await api("/api/record/devices");
+      setDevices(d);
+      setScreenIdx(d.screens?.[0]?.index ?? null);
+      setMicIdx(d.mics?.[0]?.index ?? null);
+    } catch (e) { setDevices({ error: e.message || "Capture devices unavailable" }); }
+  };
+  const startRec = async () => {
+    if (screenIdx == null) return;
+    try {
+      const { id } = await postJson("/api/record/start", { screen_index: screenIdx, mic_index: micIdx });
+      setRecModal(false); setElapsed(0); setRec({ pid: id });
+    } catch (e) { alert(e.message || "Could not start recording"); }
+  };
+  const stopRec = async () => {
+    const active = rec; setRec(null);
+    try {
+      const { id } = await postJson("/api/record/stop");
+      open(id);   // straight into the editor with the fresh capture
+    } catch (e) {
+      alert(e.message || "Recording failed");
+      if (active) refresh();
+    }
+  };
+  useEffect(() => {
+    if (!rec) return;
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [rec]);
+
   const rename = async (p) => {
     const name = window.prompt("Project name:", p.name); if (name == null) return;
     await fetch(`/api/projects/${p.id}/name`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
@@ -114,24 +156,18 @@ export function Library({ onChange }) {
           <option value="recent">Recent</option><option value="name">Name</option><option value="size">Size</option>
         </select>
         <input ref={fileRef} type="file" accept="video/*,.webm,.mp4,.mov,.mkv" hidden onChange={newFromFile} />
+        <button className="btn ghost" onClick={openRecorder} title="Record your screen">● Record</button>
         <button className="btn" disabled={busy} onClick={() => fileRef.current.click()}>{busy ? "Uploading…" : "＋ New video"}</button>
       </div>
       <div className="page-body">
-        {!extSeen && !extDismissed && (
-          <div className="banner">
-            <span>🧩 Install the Remaster recorder extension to capture a tab + your mic straight into the Library.</span>
-            <span className="grow" />
-            <a className="btn sm ghost" href="https://github.com" target="_blank" rel="noreferrer">Get it</a>
-            <button className="mini" onClick={() => { localStorage.setItem("remaster_ext_dismissed", "1"); setExtDismissed(true); }}>×</button>
-          </div>
-        )}
         {projects == null && <p className="hint">Loading…</p>}
         {projects?.length === 0 && (
           <div className="empty">
             <p className="hint">No videos yet.</p>
-            <p className="hint">Upload a screen recording, or record one with the Remaster recorder extension — it lands here automatically.</p>
+            <p className="hint">Record your screen right here, or upload an existing screen recording.</p>
             <div className="row gap">
-              <button className="btn" disabled={busy} onClick={() => fileRef.current.click()}>＋ New video</button>
+              <button className="btn" onClick={openRecorder}>● Record your screen</button>
+              <button className="btn ghost" disabled={busy} onClick={() => fileRef.current.click()}>＋ Upload a video</button>
               {hasSample && <button className="btn ghost" onClick={trySample}>Try the sample</button>}
             </div>
           </div>
@@ -147,6 +183,50 @@ export function Library({ onChange }) {
           ])}
         </div>
       </div>
+
+      {/* device picker */}
+      {recModal && (
+        <div className="modal-wrap" onClick={(e) => e.target === e.currentTarget && setRecModal(false)}>
+          <div className="modal">
+            <h3>Record your screen</h3>
+            {devices == null && <p className="modal-step">Finding capture devices…</p>}
+            {devices?.error && <p className="modal-step" style={{ color: "var(--bad)" }}>{devices.error}</p>}
+            {devices && !devices.error && (
+              <>
+                <label className="field">
+                  <span className="hint">Screen</span>
+                  <select value={screenIdx ?? ""} onChange={(e) => setScreenIdx(Number(e.target.value))}>
+                    {devices.screens.map((s) => <option key={s.index} value={s.index}>{s.name}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="hint">Microphone</span>
+                  <select value={micIdx ?? "none"} onChange={(e) => setMicIdx(e.target.value === "none" ? null : Number(e.target.value))}>
+                    <option value="none">No microphone (silent)</option>
+                    {devices.mics.map((m) => <option key={m.index} value={m.index}>{m.name}</option>)}
+                  </select>
+                </label>
+                <p className="hint">First recording asks for macOS Screen Recording permission — approve it, then record again.</p>
+              </>
+            )}
+            <div className="row gap" style={{ marginTop: 6 }}>
+              <button className="btn ghost" onClick={() => setRecModal(false)}>Cancel</button>
+              <span className="grow" />
+              <button className="btn" disabled={!devices || devices.error || screenIdx == null} onClick={startRec}>● Start recording</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* live recording bar */}
+      {rec && (
+        <div className="rec-bar">
+          <span className="rec-dot" />
+          <span>Recording · {fmtClock(elapsed)}</span>
+          <span className="grow" />
+          <button className="btn sm" onClick={stopRec}>■ Stop &amp; edit</button>
+        </div>
+      )}
     </div>
   );
 }

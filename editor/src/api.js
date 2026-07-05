@@ -7,6 +7,19 @@ export const api = (u, o) => fetch(u, o).then(j);
 export const jput = (u, b) =>
   fetch(u, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then(j);
 export const post = (u) => fetch(u, { method: "POST" }).then(j);
+// POST with an optional JSON body; surfaces the server's `detail` on error.
+export const postJson = (u, b) =>
+  fetch(u, {
+    method: "POST",
+    headers: b == null ? {} : { "Content-Type": "application/json" },
+    body: b == null ? undefined : JSON.stringify(b),
+  }).then(async (r) => {
+    if (!r.ok) {
+      let d; try { d = (await r.json()).detail; } catch { /* no json */ }
+      throw new Error(d || `${r.status}`);
+    }
+    return r.json();
+  });
 
 export async function pollJob(job, onStep, signal) {
   for (let misses = 0; ; ) {
