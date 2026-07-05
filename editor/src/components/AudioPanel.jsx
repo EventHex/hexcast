@@ -258,7 +258,8 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
               <label className="lab col">Voice name
                 <input value={cloneName} placeholder="My voice"
                        onChange={(e) => setCloneName(e.target.value)} /></label>
-              <button className="mini wideh" onClick={() => cloneRef.current.click()}>＋ Upload a 10–20s clip</button>
+              <button className="btn sm ghost" style={{ width: "100%", marginTop: 4 }}
+                      onClick={() => cloneRef.current.click()}>＋ Upload a 10–20s clip</button>
               <input ref={cloneRef} type="file" accept="audio/*" hidden onChange={doClone} />
               {cloneBusy && <p className="hint">{cloneBusy}</p>}
               <p className="hint">Clean recording, one speaker, up to 20s (≤10 MB). It appears under “My cloned voices”.</p>
