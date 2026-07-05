@@ -83,6 +83,46 @@ export function StylePanel({ pid, cfg, setCfg }) {
   const toggleAspect = (a) =>
     u({ aspects: aspects.includes(a) ? aspects.filter((x) => x !== a) : [...aspects, a] });
 
+  // one intro/outro card editor: template (none = skip), eyebrow, title,
+  // subtitle, CTA + URL, and seconds.
+  const cardEditor = (label, prefix, titleKey, subKey, durKey) => {
+    const tpl = cfg[`${prefix}_template`] || (prefix === "outro" ? "cta" : "centered");
+    const on = tpl !== "none";
+    return (
+      <>
+        <div className="row gap">
+          <span className="eyebrow" style={{ flex: 1 }}>{label} card</span>
+          <label className="chk"><input type="checkbox" checked={on}
+                 onChange={(e) => u({ [`${prefix}_template`]: e.target.checked ? (prefix === "outro" ? "cta" : "centered") : "none" })} /> Show</label>
+        </div>
+        {on && <>
+          {SEL("Layout", tpl, (v) => u({ [`${prefix}_template`]: v }), [
+            ["centered", "Centered"], ["left", "Left aligned"], ["hero", "Hero (big title)"],
+            ["cta", "Call to action"], ["wordmark", "Wordmark (logo)"]])}
+          <label className="lab col">Eyebrow <span className="dim">(small line above)</span>
+            <input value={cfg[`${prefix}_eyebrow`] || ""} placeholder="e.g. NEW"
+                   onChange={(e) => u({ [`${prefix}_eyebrow`]: e.target.value })} /></label>
+          <label className="lab col">Title
+            <input value={cfg[titleKey] || ""} onChange={(e) => u({ [titleKey]: e.target.value })} /></label>
+          <label className="lab col">Subtitle
+            <input value={cfg[subKey] || ""} onChange={(e) => u({ [subKey]: e.target.value })} /></label>
+          {(tpl === "cta" || tpl === "centered" || tpl === "left") && (
+            <div className="row gap">
+              <label className="lab col">Button
+                <input value={cfg[`${prefix}_cta`] || ""} placeholder="Try it free"
+                       onChange={(e) => u({ [`${prefix}_cta`]: e.target.value })} /></label>
+              <label className="lab col">URL / handle
+                <input value={cfg[`${prefix}_url`] || ""} placeholder="yoursite.com"
+                       onChange={(e) => u({ [`${prefix}_url`]: e.target.value })} /></label>
+            </div>
+          )}
+          <label className="lab">Seconds <input className="num" type="number" step="0.5" min="0.5" max="10"
+                 value={cfg[durKey] ?? 2.5} onChange={(e) => u({ [durKey]: +e.target.value })} /></label>
+        </>}
+      </>
+    );
+  };
+
   return (
     <div className="panel-body">
       <span className="eyebrow">Brand kit</span>
@@ -104,22 +144,13 @@ export function StylePanel({ pid, cfg, setCfg }) {
       </div>
 
       <hr className="sep" />
-      <span className="eyebrow">Intro / outro cards</span>
-      <label className="lab col">Intro title
-        <input value={cfg.title || ""} onChange={(e) => u({ title: e.target.value })} /></label>
-      <label className="lab col">Intro subtitle
-        <input value={cfg.subtitle || ""} onChange={(e) => u({ subtitle: e.target.value })} /></label>
-      <label className="lab col">Outro title
-        <input value={cfg.outro_title || ""} onChange={(e) => u({ outro_title: e.target.value })} /></label>
-      <label className="lab col">Outro subtitle
-        <input value={cfg.outro_subtitle || ""} onChange={(e) => u({ outro_subtitle: e.target.value })} /></label>
-      <div className="row gap">
-        <label className="lab">Intro s <input className="num" type="number" step="0.5" min="0" max="8"
-               value={cfg.intro_dur ?? 2.5} onChange={(e) => u({ intro_dur: +e.target.value })} /></label>
-        <label className="lab">Outro s <input className="num" type="number" step="0.5" min="0" max="8"
-               value={cfg.outro_dur ?? 2.5} onChange={(e) => u({ outro_dur: +e.target.value })} /></label>
-      </div>
-      {SEL("Card style", cfg.card_style || "gradient", (v) => u({ card_style: v }), [
+      {cardEditor("Intro", "intro", "title", "subtitle", "intro_dur")}
+      <hr className="sep" />
+      {cardEditor("Outro", "outro", "outro_title", "outro_subtitle", "outro_dur")}
+
+      <hr className="sep" />
+      <span className="eyebrow">Card background</span>
+      {SEL("Style", cfg.card_style || "gradient", (v) => u({ card_style: v }), [
         ["gradient", "Gradient"], ["diagonal", "Diagonal"], ["radial", "Radial glow"],
         ["accent", "Accent bar"], ["minimal", "Minimal light"]])}
       <div className="row gap">

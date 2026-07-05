@@ -22,9 +22,18 @@ DEFAULTS = {
     "sfx_clicks": True,          # click sound at each recorded click (needs events.json)
     "sfx_zoom": False,           # whoosh at each zoom-in
     "aspects": ["16x9"],         # export sizes; add "9x16"/"1x1" in the editor
-    "card_style": "gradient",    # intro/outro/scene card look: gradient | diagonal | radial | accent | minimal
+    "card_style": "gradient",    # intro/outro/scene card BACKGROUND look: gradient | diagonal | radial | accent | minimal
     "card_top": None,            # card background top color; None = brand_top
     "card_bottom": None,         # card background bottom color; None = brand_bottom
+    # --- intro/outro cards v2: layout templates + richer slots (independent per card) ---
+    "intro_template": "centered",   # none | centered | left | hero | cta | wordmark  (none = skip)
+    "outro_template": "cta",
+    "intro_eyebrow": "",         # small uppercase kicker above the title
+    "outro_eyebrow": "",
+    "intro_cta": "",             # button-style call-to-action text (mainly outro)
+    "intro_url": "",             # small URL/handle under the CTA
+    "outro_cta": "",
+    "outro_url": "",
     # --- visuals (P2) ---
     "radius": 24,                # window corner radius (px on canvas)
     "padding": None,             # None = auto per aspect; else 4..22 (% margin)

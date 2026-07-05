@@ -210,44 +210,112 @@ def _card_bg(W, H, style):
     return img
 
 
-def card(path, W, H, title, subtitle, style=None):
-    style = style or CARD_STYLE
-    img = _card_bg(W, H, style).convert("RGBA")
-    left = style in ("accent", "minimal")
-    dark_text = style == "minimal"
-    if LOGO and os.path.exists(LOGO):
-        try:
-            lg = Image.open(LOGO).convert("RGBA")
-            lg.thumbnail((int(W * 0.22), int(H * 0.16)), Image.LANCZOS)
-            pos = (int(W * 0.055), int(H * 0.14)) if left else ((W - lg.width) // 2, int(H * 0.24))
-            img.alpha_composite(lg, pos)
-        except Exception:
-            pass
-    align = globals().get("CARD_ALIGN")
-    if align in ("left", "center"):
-        left = align == "left"
-    img = img.convert("RGB")
-    d = ImageDraw.Draw(img)
-    scale = float(globals().get("CARD_SCALE") or 1.0)
-    tf = find_font(int(H * 0.09 * scale), bold=True); sf = find_font(int(H * 0.038 * scale), bold=False)
+# intro/outro layout templates — align, whether logo/subtitle/cta show, title scale
+CARD_TPL = {
+    "centered": dict(align="center", logo=True,  tscale=1.0, sub=True,  cta=True,  logo_big=False),
+    "left":     dict(align="left",   logo=True,  tscale=1.0, sub=True,  cta=True,  logo_big=False),
+    "hero":     dict(align="center", logo=False, tscale=1.45, sub=True, cta=False, logo_big=False),
+    "cta":      dict(align="center", logo=True,  tscale=0.92, sub=True, cta=True,  logo_big=False),
+    "wordmark": dict(align="center", logo=True,  tscale=1.1, sub=False, cta=False, logo_big=True),
+}
+
+
+def _tsz(d, text, font):
+    b = d.textbbox((0, 0), text, font=font)
+    return b[2] - b[0], b[3] - b[1]
+
+
+def card(path, W, H, spec):
+    """Render one intro/outro/scene card from a spec:
+    {template, eyebrow, title, subtitle, cta, url}. Background comes from
+    CARD_STYLE; template controls layout. A measured vertical stack keeps the
+    content optically centered whatever slots are filled."""
     import config as _c
+    tpl = CARD_TPL.get(spec.get("template") or "centered", CARD_TPL["centered"])
+    dark = CARD_STYLE == "minimal"
+    scale = float(globals().get("CARD_SCALE") or 1.0)
+    img = _card_bg(W, H, CARD_STYLE).convert("RGBA")
+    d = ImageDraw.Draw(img)
+    align = tpl["align"]
+    if globals().get("CARD_ALIGN") in ("left", "center"):
+        align = globals()["CARD_ALIGN"]
+    lm = int(W * 0.06)
     tcol = _c.hex_rgb(globals()["CARD_TITLE_COLOR"]) if globals().get("CARD_TITLE_COLOR") \
-        else ((18, 26, 40) if dark_text else (255, 255, 255))
+        else ((18, 26, 40) if dark else (255, 255, 255))
     scol = _c.hex_rgb(globals()["CARD_SUB_COLOR"]) if globals().get("CARD_SUB_COLOR") \
-        else (CTOP if dark_text else (150, 200, 255))
-    tw = d.textbbox((0, 0), title, font=tf); sw = d.textbbox((0, 0), subtitle, font=sf)
-    if left:
-        d.text((W * 0.055, H * 0.46), title, font=tf, fill=tcol)
-        d.text((W * 0.055, H * 0.60), subtitle, font=sf, fill=scol)
-    else:
-        d.text(((W - (tw[2] - tw[0])) / 2, H * 0.46), title, font=tf, fill=tcol)
-        d.text(((W - (sw[2] - sw[0])) / 2, H * 0.60), subtitle, font=sf, fill=scol)
-    img.save(path)
+        else (CTOP if dark else (150, 200, 255))
+
+    ef = find_font(int(H * 0.024), bold=True)
+    tf = find_font(int(H * 0.085 * tpl["tscale"] * scale), bold=True)
+    sf = find_font(int(H * 0.036 * scale), bold=False)
+    cf = find_font(int(H * 0.030), bold=True)
+    uf = find_font(int(H * 0.026), bold=False)
+
+    logo_img = None
+    if tpl["logo"] and LOGO and os.path.exists(LOGO):
+        try:
+            logo_img = Image.open(LOGO).convert("RGBA")
+            logo_img.thumbnail((int(W * 0.5), int(H * (0.30 if tpl["logo_big"] else 0.14))), Image.LANCZOS)
+        except Exception:
+            logo_img = None
+
+    # build the stack top->bottom: (kind, payload, font, height)
+    items = []
+    if logo_img:
+        items.append(("logo", logo_img, None, logo_img.height))
+    eyebrow = (spec.get("eyebrow") or "").strip().upper()
+    if eyebrow:
+        items.append(("eyebrow", eyebrow, ef, _tsz(d, eyebrow, ef)[1]))
+    title = (spec.get("title") or "").strip()
+    if title and not (tpl["logo_big"] and logo_img):
+        items.append(("title", title, tf, _tsz(d, title, tf)[1]))
+    subtitle = (spec.get("subtitle") or "").strip()
+    if subtitle and tpl["sub"]:
+        items.append(("sub", subtitle, sf, _tsz(d, subtitle, sf)[1]))
+    cta = (spec.get("cta") or "").strip()
+    if cta and tpl["cta"]:
+        items.append(("cta", cta, cf, int(_tsz(d, cta, cf)[1] + H * 0.032)))   # + pill padding
+    url = (spec.get("url") or "").strip()
+    if url:
+        items.append(("url", url, uf, _tsz(d, url, uf)[1]))
+
+    gap = int(H * 0.024)
+    total = sum(it[3] for it in items) + gap * max(0, len(items) - 1)
+    y = (H - total) // 2
+
+    def _line(text, font, color, yy):
+        w = _tsz(d, text, font)[0]
+        x = lm if align == "left" else (W - w) // 2
+        d.text((x, yy), text, font=font, fill=color)
+
+    for kind, payload, font, hh in items:
+        if kind == "logo":
+            x = lm if align == "left" else (W - payload.width) // 2
+            img.alpha_composite(payload, (x, y))
+        elif kind == "eyebrow":
+            _line(payload, font, scol, y)
+        elif kind == "title":
+            _line(payload, font, tcol, y)
+        elif kind == "sub":
+            _line(payload, font, scol, y)
+        elif kind == "url":
+            _line(payload, font, scol, y)
+        elif kind == "cta":
+            tw = _tsz(d, payload, font)[0]
+            padx = int(H * 0.032)
+            pw = tw + padx * 2
+            x = lm if align == "left" else (W - pw) // 2
+            d.rounded_rectangle([x, y, x + pw, y + hh], radius=hh // 2, fill=tuple(tcol))
+            txt_col = tuple(CBOT) if not dark else (255, 255, 255)
+            d.text((x + padx, y + (hh - _tsz(d, payload, font)[1]) // 2 - int(H * 0.004)),
+                   payload, font=font, fill=txt_col)
+        y += hh + gap
+    img.convert("RGB").save(path)
 
 
-def make_card_clip(out, W, H, title, subtitle, seconds=2.0):
+def make_card_clip(out, W, H, spec, seconds=2.0):
     png = out.replace(".mp4", ".png")
-    card(png, W, H, title, subtitle)
+    card(png, W, H, spec)
     sh("ffmpeg", "-y", "-loop", "1", "-t", f"{seconds}", "-i", png,
        "-f", "lavfi", "-t", f"{seconds}", "-i", "anullsrc=r=44100:cl=stereo",
        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", "30",
@@ -288,6 +356,13 @@ def main():
     ZOOM_ON = bool(cfg["zoom"])
     OUTRO_TITLE, OUTRO_SUB = cfg["outro_title"], cfg["outro_subtitle"]
     INTRO_DUR = float(cfg.get("intro_dur", 2.5) or 2.5); OUTRO_DUR = float(cfg.get("outro_dur", 2.5) or 2.5)
+    # intro/outro card specs (v2): template + slots. template "none" = skip.
+    INTRO_SPEC = {"template": cfg.get("intro_template") or "centered", "eyebrow": cfg.get("intro_eyebrow") or "",
+                  "title": TITLE, "subtitle": SUBTITLE, "cta": cfg.get("intro_cta") or "", "url": cfg.get("intro_url") or ""}
+    OUTRO_SPEC = {"template": cfg.get("outro_template") or "centered", "eyebrow": cfg.get("outro_eyebrow") or "",
+                  "title": OUTRO_TITLE, "subtitle": OUTRO_SUB, "cta": cfg.get("outro_cta") or "", "url": cfg.get("outro_url") or ""}
+    INTRO_ON = INTRO_SPEC["template"] != "none" and INTRO_DUR > 0
+    OUTRO_ON = OUTRO_SPEC["template"] != "none" and OUTRO_DUR > 0
 
     # v:0 = first video stream only (mp4s can carry a thumbnail stream too)
     _dim = ffprobe(RAW, "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x")
@@ -434,10 +509,11 @@ def main():
         return os.path.exists(out) and dur(out) > 0
 
     parts, timeline, pdurs, fails = [], [], [], []
-    intro = f"{PROJ}/seg/card_{_h('intro', TITLE, SUBTITLE, INTRO_DUR, *card_sig)}.mp4"
-    if not _cached(intro):
-        make_card_clip(intro, W, H, TITLE, SUBTITLE, seconds=INTRO_DUR)
-    used.add(intro); parts.append(intro); pdurs.append(dur(intro))
+    if INTRO_ON:
+        intro = f"{PROJ}/seg/card_{_h('intro', repr(sorted(INTRO_SPEC.items())), INTRO_DUR, *card_sig)}.mp4"
+        if not _cached(intro):
+            make_card_clip(intro, W, H, INTRO_SPEC, seconds=INTRO_DUR)
+        used.add(intro); parts.append(intro); pdurs.append(dur(intro))
 
     for k, sg in enumerate(rsegs):
         typ = sg.get("type", "clip")
@@ -447,7 +523,8 @@ def main():
             seg_len = float(sg.get("dur") or 3.0)
             out = f"{PROJ}/seg/card_{_h('scene', sg.get('title') or sg.get('en') or '', sg.get('subtitle') or '', seg_len, *card_sig)}.mp4"
             if not (hit := _cached(out)):
-                make_card_clip(out, W, H, sg.get("title") or sg.get("en") or "", sg.get("subtitle") or "", seconds=seg_len)
+                make_card_clip(out, W, H, {"template": "centered", "title": sg.get("title") or sg.get("en") or "",
+                                           "subtitle": sg.get("subtitle") or ""}, seconds=seg_len)
         elif typ == "clip" and ORIGINAL_VOICE:  # keep the recorded audio + natural timing
             seg_len = max(0.4, sg["end"] - sg["start"])
             out = f"{PROJ}/seg/clip_{_h('orig', sg['start'], sg['end'], W, H, raw_sig)}.mp4"
@@ -495,10 +572,11 @@ def main():
         raise SystemExit("Some segments failed to render — aborting so no content is silently lost:\n"
                          + "\n".join(fails))
 
-    outro = f"{PROJ}/seg/card_{_h('outro', OUTRO_TITLE, OUTRO_SUB, OUTRO_DUR, *card_sig)}.mp4"
-    if not _cached(outro):
-        make_card_clip(outro, W, H, OUTRO_TITLE, OUTRO_SUB, seconds=OUTRO_DUR)
-    used.add(outro); parts.append(outro); pdurs.append(dur(outro))
+    if OUTRO_ON:
+        outro = f"{PROJ}/seg/card_{_h('outro', repr(sorted(OUTRO_SPEC.items())), OUTRO_DUR, *card_sig)}.mp4"
+        if not _cached(outro):
+            make_card_clip(outro, W, H, OUTRO_SPEC, seconds=OUTRO_DUR)
+        used.add(outro); parts.append(outro); pdurs.append(dur(outro))
 
     # GC stale cache entries + legacy positional seg files (element uploads
     # img_* and zoom frames are untouched). A .png sticks around only while its

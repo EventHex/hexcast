@@ -12,8 +12,10 @@ import { CardPreview } from "./CardPreview.jsx";
 
 export function timing(script, cfg, srcDur) {
   const segs = (script.segments || []).filter((s) => s.rstart != null);
-  const introDur = Math.max(0, +(cfg.intro_dur ?? 2.5) || 0);
-  const outroDur = Math.max(0, +(cfg.outro_dur ?? 2.5) || 0);
+  const introOn = (cfg.intro_template || "centered") !== "none";
+  const outroOn = (cfg.outro_template || "centered") !== "none";
+  const introDur = introOn ? Math.max(0, +(cfg.intro_dur ?? 2.5) || 0) : 0;
+  const outroDur = outroOn ? Math.max(0, +(cfg.outro_dur ?? 2.5) || 0) : 0;
   const bakedIntro = segs.length ? segs[0].rstart : 0;
   // duration-less sources (webm without a header probes as 0): fall back to
   // the script's own raw end times so the preview isn't cut to nothing
@@ -148,15 +150,19 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
   const capColor = cfg.cap_color || "#fff";
   const capBoxed = (cfg.cap_bg || "box") !== "none";
   const capOp = cfg.cap_bg_opacity != null ? +cfg.cap_bg_opacity : 0.58;
-  const cardProps = { style: cfg.card_style, top: cardTop, bot: cardBot, logo, height: winH,
-                      align: cfg.card_align || null, titleColor: cfg.card_title_color || null,
-                      subColor: cfg.card_sub_color || null, scale: +(cfg.card_scale || 1), fontFamily: family };
+  const cardBase = { style: cfg.card_style, top: cardTop, bot: cardBot, logo, height: winH,
+                     align: cfg.card_align || null, titleColor: cfg.card_title_color || null,
+                     subColor: cfg.card_sub_color || null, scale: +(cfg.card_scale || 1), fontFamily: family };
+  const introProps = { ...cardBase, template: cfg.intro_template || "centered", eyebrow: cfg.intro_eyebrow || "",
+                       title: cfg.title, subtitle: cfg.subtitle, cta: cfg.intro_cta || "", url: cfg.intro_url || "" };
+  const outroProps = { ...cardBase, template: cfg.outro_template || "centered", eyebrow: cfg.outro_eyebrow || "",
+                       title: cfg.outro_title, subtitle: cfg.outro_subtitle, cta: cfg.outro_cta || "", url: cfg.outro_url || "" };
 
   const windowContent = (
     <>
       {introF > 0 && (
         <Sequence from={0} durationInFrames={introF}>
-          <CardPreview {...cardProps} title={cfg.title} subtitle={cfg.subtitle} />
+          <CardPreview {...introProps} />
         </Sequence>
       )}
       <Sequence from={introF} durationInFrames={contentF}>
@@ -207,7 +213,7 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
       </Sequence>
       {outroF > 0 && (
         <Sequence from={introF + contentF} durationInFrames={outroF}>
-          <CardPreview {...cardProps} title={cfg.outro_title} subtitle={cfg.outro_subtitle} />
+          <CardPreview {...outroProps} />
         </Sequence>
       )}
     </>
