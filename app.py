@@ -104,20 +104,71 @@ if os.path.isdir(_EDITOR_DIST):
 _PUBLIC = ("/api/auth/", "/api/health", "/api/ping")
 
 
-def _cookie_uid(scope) -> str | None:
+# --- optional central control plane (SaaS "model B"): accounts + usage live in
+# a remote service and this app is a client (login/verify/usage over HTTP).
+# Unset REMASTER_AUTH_URL => self-contained local accounts (the default). ---
+AUTH_URL = os.environ.get("REMASTER_AUTH_URL", "").rstrip("/")
+CENTRAL = bool(AUTH_URL)
+_TOK: "contextvars.ContextVar[str | None]" = contextvars.ContextVar("tok", default=None)
+_USER: "contextvars.ContextVar[dict | None]" = contextvars.ContextVar("user", default=None)
+_verify_cache: dict = {}   # token -> (user, expiry_ts)
+
+
+def _central(path, method="POST", json=None, token=None, timeout=20):
+    import requests
+    h = {"Authorization": "Bearer " + token} if token else {}
+    call = requests.post if method == "POST" else requests.get
+    return call(AUTH_URL + path, json=json, headers=h, timeout=timeout)
+
+
+def _resolve_user(tok):
+    """Session token -> user dict (or None). Central mode verifies against the
+    control plane (cached ~60s); local mode uses the embedded SQLite."""
+    if not tok:
+        return None
+    if not CENTRAL:
+        uid = auth.verify_token(tok)
+        return auth.get(uid) if uid else None
+    import time as _t
+    hit = _verify_cache.get(tok)
+    if hit and hit[1] > _t.time():
+        return hit[0]
+    try:
+        r = _central("/auth/verify", "GET", token=tok)
+        if r.status_code != 200:
+            _verify_cache.pop(tok, None)
+            return None
+        u = r.json()["user"]
+        _verify_cache[tok] = (u, _t.time() + 60)
+        return u
+    except Exception:
+        return hit[0] if hit else None   # tolerate a transient central outage
+
+
+def _report_usage(kind: str, meta: str = "") -> None:
+    """Best-effort central usage metering (BYOK => advisory). No-op locally."""
+    if not CENTRAL:
+        return
+    try:
+        _central("/usage/report", json={"kind": kind, "meta": meta}, token=_TOK.get(), timeout=8)
+    except Exception:
+        pass
+
+
+def _cookie_token(scope) -> str | None:
     for k, v in scope.get("headers", []):
         if k == b"cookie":
             for part in v.decode("latin1").split(";"):
                 name, _, val = part.strip().partition("=")
                 if name == auth.COOKIE:
-                    return auth.verify_token(val)
+                    return val
     return None
 
 
 class _AuthCtx:
-    """Pure-ASGI middleware: resolves the session cookie into _CUR (contextvars
-    set here DO propagate to endpoints, unlike BaseHTTPMiddleware) and rejects
-    unauthenticated API/media calls before they touch any data path."""
+    """Pure-ASGI middleware: resolves the session cookie into _CUR / _TOK / _USER
+    (contextvars set here DO propagate to endpoints, unlike BaseHTTPMiddleware)
+    and rejects unauthenticated API/media calls before they touch any data path."""
 
     def __init__(self, app):
         self.app = app
@@ -125,7 +176,9 @@ class _AuthCtx:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        uid = _cookie_uid(scope)
+        tok = _cookie_token(scope)
+        user = _resolve_user(tok)
+        uid = user["id"] if user else None
         path = scope.get("path", "")
         method = scope.get("method", "GET")
         guarded = path.startswith("/api/") or path.startswith("/media/")
@@ -137,11 +190,11 @@ class _AuthCtx:
                                     (b"content-length", str(len(body)).encode())]})
             await send({"type": "http.response.body", "body": body})
             return
-        token = _CUR.set(uid)
+        c1, c2, c3 = _CUR.set(uid), _TOK.set(tok), _USER.set(user)
         try:
             await self.app(scope, receive, send)
         finally:
-            _CUR.reset(token)
+            _CUR.reset(c1); _TOK.reset(c2); _USER.reset(c3)
 
 
 app.add_middleware(_AuthCtx)
@@ -185,60 +238,110 @@ def _migrate_legacy(uid: str) -> None:
         settingsmod.save_settings(dest, {"keys": envkeys})
 
 
-def _set_session(response: Response, uid: str) -> None:
-    response.set_cookie(auth.COOKIE, auth.make_token(uid), httponly=True,
-                        samesite="lax", max_age=auth.SESSION_DAYS * 86400, path="/")
+def _set_cookie(response: Response, token: str) -> None:
+    response.set_cookie(auth.COOKIE, token, httponly=True, samesite="lax",
+                        max_age=auth.SESSION_DAYS * 86400, path="/")
 
 
-def _signup(email, password, name, response):
-    email = (email or "").strip().lower()
-    if "@" not in email or len(password or "") < 6:
-        raise HTTPException(400, "valid email and a 6+ char password required")
-    if auth.get_by_email(email):
-        raise HTTPException(409, "that email already has an account")
-    first = auth.count() == 0
-    uid = auth.create_user(email, name, pw=password)
-    _ensure_user_space(uid)
+def _no_local_users() -> bool:
+    if not os.path.isdir(USERS_ROOT):
+        return True
+    return not any(os.path.isdir(os.path.join(USERS_ROOT, x)) for x in os.listdir(USERS_ROOT))
+
+
+def _claim_space(user: dict, token: str, response: Response) -> None:
+    """Provision this account's local data dir (+ claim any legacy data if this
+    is the machine's first account) and set the session cookie."""
+    import time as _t
+    first = _no_local_users()
+    _ensure_user_space(user["id"])
     if first:
-        _migrate_legacy(uid)
-    _set_session(response, uid)
-    return auth.get(uid)
+        _migrate_legacy(user["id"])
+    _set_cookie(response, token)
+    _verify_cache[token] = (user, _t.time() + 60)
+
+
+def _central_detail(r) -> str:
+    try:
+        return r.json().get("detail") or "sign-in failed"
+    except Exception:
+        return "sign-in failed"
 
 
 @app.post("/api/auth/signup")
 def signup(body: dict = Body(...), response: Response = None):
-    return _signup(body.get("email"), body.get("password"), body.get("name"), response)
+    if CENTRAL:
+        r = _central("/auth/signup", json={"email": body.get("email"),
+                     "password": body.get("password"), "name": body.get("name")})
+        if r.status_code != 200:
+            raise HTTPException(r.status_code, _central_detail(r))
+        d = r.json()
+        _claim_space(d["user"], d["token"], response)
+        return d["user"]
+    # local mode
+    email = (body.get("email") or "").strip().lower()
+    if "@" not in email or len(body.get("password") or "") < 6:
+        raise HTTPException(400, "valid email and a 6+ char password required")
+    if auth.get_by_email(email):
+        raise HTTPException(409, "that email already has an account")
+    first = auth.count() == 0
+    uid = auth.create_user(email, body.get("name"), pw=body.get("password"))
+    _ensure_user_space(uid)
+    if first:
+        _migrate_legacy(uid)
+    _set_cookie(response, auth.make_token(uid))
+    return auth.get(uid)
 
 
 @app.post("/api/auth/login")
 def login(body: dict = Body(...), response: Response = None):
+    if CENTRAL:
+        r = _central("/auth/login", json={"email": body.get("email"), "password": body.get("password")})
+        if r.status_code != 200:
+            raise HTTPException(r.status_code, _central_detail(r))
+        d = r.json()
+        _claim_space(d["user"], d["token"], response)
+        return d["user"]
     row = auth.get_by_email(body.get("email") or "")
     if not row or not auth.verify_pw(body.get("password") or "", row["pw_hash"]):
         raise HTTPException(401, "wrong email or password")
     _ensure_user_space(row["id"])
-    _set_session(response, row["id"])
+    _set_cookie(response, auth.make_token(row["id"]))
     return auth.get(row["id"])
 
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
+    _verify_cache.pop(_TOK.get(), None)
     response.delete_cookie(auth.COOKIE, path="/")
     return {"ok": True}
 
 
 @app.get("/api/auth/me")
 def me():
-    uid = _CUR.get()
-    return {"user": auth.get(uid) if uid else None, "google": auth.google_configured()}
+    return {"user": _USER.get(), "google": (False if CENTRAL else auth.google_configured())}
 
 
 @app.get("/api/auth/google/login")
 def google_login(request: Request):
+    if CENTRAL:
+        return RedirectResponse(AUTH_URL + "/auth/google/login")
     if not auth.google_configured():
         raise HTTPException(400, "Google sign-in is not configured on this server")
     redirect_uri = str(request.base_url).rstrip("/") + "/api/auth/google/callback"
-    url = auth.google_auth_url(redirect_uri, state="remaster")
-    return RedirectResponse(url)
+    return RedirectResponse(auth.google_auth_url(redirect_uri, state="remaster"))
+
+
+@app.get("/auth/google/done")
+def google_done(token: str = "", response: Response = None):
+    """Loopback target for central's Google flow: receive the session token,
+    claim local space, and open the app."""
+    user = _resolve_user(token)
+    if not user:
+        raise HTTPException(400, "Google sign-in failed")
+    resp = RedirectResponse("/editor/")
+    _claim_space(user, token, resp)
+    return resp
 
 
 @app.get("/api/auth/google/callback")
@@ -785,6 +888,7 @@ def render_project(pid: str):
     elif need_fx:
         steps.append(("Applying zoom, captions & sound", ["pipeline/build_revoice.py", "{REL}", "--fx-only"]))
     steps.append(("Framing & exporting", ["pipeline/polish_export.py", "{REL}"]))
+    _report_usage("render")
     return _spawn(d, steps, record_state=True)
 
 

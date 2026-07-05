@@ -7,3 +7,9 @@ projects/
 node_modules/
 voice_cache/
 .DS_Store
+
+# central control-plane dev artifacts (never commit secrets/db)
+.central-secret
+central/.central-secret
+central/*.db
+*.db

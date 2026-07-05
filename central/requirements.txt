@@ -1,0 +1,5 @@
+fastapi>=0.110
+uvicorn>=0.29
+requests>=2.31
+# Postgres / Cloud SQL driver — only needed when DATABASE_URL is a postgres URL
+psycopg[binary]>=3.1
