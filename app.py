@@ -1084,6 +1084,48 @@ def record_stop():
     return {"id": pid, "raw": "raw.mp4"}
 
 
+# ---- auto-update check ---------------------------------------------------
+# The app polls a release manifest ({version,url,notes}) and, if a newer build
+# exists, the editor shows a banner linking to the DMG. Silent self-replace
+# needs a signed build (later) — for the unsigned build we notify + download.
+_UPD: dict = {"at": 0.0, "data": None}
+
+
+def _semver(v: str) -> tuple:
+    import re as _re
+    return tuple(int(x) for x in _re.findall(r"\d+", v or "")[:3])
+
+
+def _update_manifest_url() -> str:
+    u = os.environ.get("REMASTER_UPDATE_URL", "").strip()
+    if u:
+        return u
+    return (AUTH_URL + "/updates/latest") if CENTRAL else ""
+
+
+@app.get("/api/update")
+def check_update():
+    import time as _t
+    now = _t.time()
+    if _UPD["data"] is None or now - _UPD["at"] > 3600:
+        _UPD["at"] = now
+        _UPD["data"] = {}
+        url = _update_manifest_url()
+        if url:
+            try:
+                import requests
+                r = requests.get(url, timeout=6)
+                if r.ok:
+                    _UPD["data"] = r.json()
+            except Exception:
+                pass
+    m = _UPD["data"] or {}
+    latest = m.get("version")
+    available = bool(latest) and _semver(latest) > _semver(VERSION)
+    return {"current": VERSION, "latest": latest, "available": available,
+            "url": m.get("url"), "notes": m.get("notes")}
+
+
 _SAMPLE_DIR = os.path.join(HERE, "assets", "sample")   # optional bundled starter project
 
 

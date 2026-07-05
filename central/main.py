@@ -44,6 +44,25 @@ def health():
             "google": bool(os.environ.get("GOOGLE_OAUTH_CLIENT_ID"))}
 
 
+@app.get("/updates/latest")
+def latest_update():
+    """Release manifest the desktop app polls for auto-update. Set per release
+    with env vars on the service (no redeploy needed):
+        gcloud run services update remaster-central \\
+          --set-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/Remaster.dmg
+    Falls back to central/update_manifest.json for local runs."""
+    v = os.environ.get("UPDATE_VERSION")
+    if v:
+        return {"version": v, "url": os.environ.get("UPDATE_URL"),
+                "notes": os.environ.get("UPDATE_NOTES")}
+    import json
+    p = os.path.join(os.path.dirname(__file__), "update_manifest.json")
+    if os.path.exists(p):
+        with open(p) as f:
+            return json.load(f)
+    return {"version": None}
+
+
 @app.post("/auth/signup")
 def signup(body: dict = Body(...)):
     email = (body.get("email") or "").strip().lower()

@@ -48,6 +48,13 @@ export function Shell({ user, onLogout } = {}) {
   const [anyKey, setAnyKey] = useState(null);
   const [onboard, setOnboard] = useState(false);
   const [cmdk, setCmdk] = useState(false);
+  const [upd, setUpd] = useState(null);       // {latest,url,notes} if a newer build exists
+
+  useEffect(() => {
+    api("/api/update").then((u) => {
+      if (u.available && localStorage.getItem("remaster_upd_dismiss") !== u.latest) setUpd(u);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -118,6 +125,15 @@ export function Shell({ user, onLogout } = {}) {
           </div>
         )}
       </header>
+
+      {upd && (
+        <div className="updatebar">
+          <span>◆ Remaster {upd.latest} is available{upd.notes ? ` — ${upd.notes}` : ""}</span>
+          <span className="grow" />
+          {upd.url && <a className="btn sm" href={upd.url} target="_blank" rel="noreferrer">Download update</a>}
+          <button className="mini" title="Dismiss" onClick={() => { localStorage.setItem("remaster_upd_dismiss", upd.latest); setUpd(null); }}>×</button>
+        </div>
+      )}
 
       <div className="shellbody">
         {view === "library" && <Library onChange={loadStats} />}

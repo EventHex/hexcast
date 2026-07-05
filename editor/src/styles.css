@@ -347,3 +347,8 @@ kbd { background: var(--panel2); border: 1px solid var(--line-strong); border-ra
 .rec-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--bad); animation: recpulse 1.2s ease-in-out infinite; }
 @keyframes recpulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+
+/* --- auto-update banner --- */
+.updatebar { display: flex; align-items: center; gap: 12px; padding: 9px 18px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel)); color: var(--text);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); font-size: 13px; }
