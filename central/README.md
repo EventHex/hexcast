@@ -45,9 +45,11 @@ gcloud run services update remaster-central --region asia-south1 \
   --update-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/Remaster.dmg
 ```
 
+`SECRET_KEY` is delivered from **Secret Manager** (`remaster-secret`), not a
+plaintext env var — `deploy.sh` creates the secret, grants the runtime SA
+`secretmanager.secretAccessor`, and deploys with
+`--set-secrets SECRET_KEY=remaster-secret:latest`.
+
 ### Alternative: Cloud SQL Postgres
 Set `DATABASE_URL=postgresql://…` (and `--add-cloudsql-instances`) instead of
 `REMASTER_BACKEND=firestore`. `store.py` supports both.
-
-> Hardening (later): move `SECRET_KEY` from an env var into Secret Manager
-> (`--set-secrets SECRET_KEY=remaster-secret:latest`).

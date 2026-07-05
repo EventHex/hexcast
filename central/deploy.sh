@@ -24,14 +24,21 @@ gcloud projects add-iam-policy-binding "$PROJECT" \
   --role="roles/datastore.user" --condition=None >/dev/null
 echo "    granted roles/datastore.user"
 
-echo "==> 2/3  session secret (stable across deploys, gitignored)"
+echo "==> 2/3  session secret in Secret Manager (stable across deploys)"
 if [ ! -f .central-secret ]; then
   openssl rand -hex 32 > .central-secret && chmod 600 .central-secret
-  echo "    generated .central-secret"
-else
-  echo "    reusing .central-secret"
 fi
-SECRET="$(tr -d '\n' < .central-secret)"
+if ! gcloud secrets describe remaster-secret --project "$PROJECT" >/dev/null 2>&1; then
+  gcloud secrets create remaster-secret --data-file=.central-secret \
+    --replication-policy=automatic --project "$PROJECT" >/dev/null
+  echo "    created secret remaster-secret"
+else
+  echo "    secret remaster-secret exists"
+fi
+gcloud secrets add-iam-policy-binding remaster-secret --project "$PROJECT" \
+  --member="serviceAccount:${SA}" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null
+echo "    runtime SA can read it"
 
 echo "==> 3/3  build + deploy to Cloud Run ($REGION)"
 gcloud run deploy "$SERVICE" \
@@ -39,7 +46,8 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --memory 512Mi \
-  --set-env-vars "REMASTER_BACKEND=firestore,SECRET_KEY=${SECRET},ALLOW_ORIGINS=*,UPDATE_VERSION=0.1.0" \
+  --set-env-vars "REMASTER_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=0.1.0" \
+  --set-secrets "SECRET_KEY=remaster-secret:latest" \
   --project "$PROJECT"
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
