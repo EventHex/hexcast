@@ -50,7 +50,7 @@ def main() -> None:
 
     threading.Thread(target=serve, daemon=True).start()
 
-    # wait for readiness, then open the editor
+    # wait for the server to be ready
     import urllib.request
     url = f"http://{host}:{port}"
     for _ in range(80):
@@ -59,15 +59,23 @@ def main() -> None:
             break
         except Exception:
             time.sleep(0.4)
-    import webbrowser
-    webbrowser.open(url + "/editor/")
 
-    print(f"Remaster running at {url}/editor/  (close this window to quit)")
+    # Native desktop window (own window + dock icon, no browser chrome). Falls
+    # back to the default browser if the WebView backend is unavailable.
     try:
-        while True:
-            time.sleep(3600)
-    except KeyboardInterrupt:
-        pass
+        import webview
+        webview.create_window("Remaster", url + "/editor/",
+                              width=1360, height=900, min_size=(1024, 680))
+        webview.start()          # blocks until the window is closed -> app quits
+    except Exception as e:
+        print("native window unavailable, opening browser:", e)
+        import webbrowser
+        webbrowser.open(url + "/editor/")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":

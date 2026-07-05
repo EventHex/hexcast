@@ -38,6 +38,10 @@ hiddenimports = [
     # app + pipeline modules imported dynamically / via sys.path
     "app", "auth", "brands", "config", "cerebras_clean", "zoom_decide",
     "timeline_fx", "fonts", "events_zoom",
+    # native desktop window (pywebview + macOS WebKit backend)
+    "webview", "webview.platforms.cocoa", "bottle", "proxy_tools",
+    "objc", "Foundation", "AppKit", "WebKit", "Quartz", "Cocoa",
+    "Security", "UniformTypeIdentifiers",
 ] + collect_submodules("providers") + collect_submodules("tools")
 
 excludes = ["torch", "faster_whisper", "ctranslate2", "tkinter", "matplotlib", "numpy.tests"]

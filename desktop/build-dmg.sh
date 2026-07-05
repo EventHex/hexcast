@@ -10,7 +10,7 @@ echo "==> Python packaging venv ($($PY --version 2>&1))"
 # shellcheck disable=SC1091
 source .pack/bin/activate
 pip install --upgrade pip -q
-pip install -q pyinstaller
+pip install -q pyinstaller pywebview          # pywebview = native desktop window
 pip install -q -r ../requirements.txt
 
 echo "==> Editor build"
