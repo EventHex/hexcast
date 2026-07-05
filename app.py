@@ -533,11 +533,12 @@ def _sigs(cfg, script):
 
 
 @app.post("/api/projects/{pid}/apply-fx")
-@app.post("/api/projects/{pid}/export")
-def export_project(pid: str):
-    """Smart export: diff the current config/script against what was last
-    exported and run only the stages that changed (frame-only, fx+frame, or a
-    full re-voice). Nothing changed -> no job, files already current."""
+@app.post("/api/projects/{pid}/render")
+def render_project(pid: str):
+    """Smart render: diff the current config/script against what was last
+    rendered and run only the stages that changed (frame-only, fx+frame, or a
+    full re-voice). Nothing changed -> no job, files already current. Produces
+    the video files that Export downloads and Publish distributes."""
     d = proj_dir(pid)
     cfg = cfgmod.load(d)
     sp = os.path.join(d, "script.json")
@@ -702,14 +703,6 @@ def process(pid: str):
     return _spawn(proj_dir(pid), [
         ("Transcribing", ["pipeline/transcribe.py", "{REL}"]),
         ("Clean + zoom + voice + align", ["pipeline/build_revoice.py", "{REL}"]),
-        ("Frame + export", ["pipeline/polish_export.py", "{REL}"]),
-    ])
-
-
-@app.post("/api/projects/{pid}/render")
-def render(pid: str):
-    return _spawn(proj_dir(pid), [
-        ("Re-render from edited script", ["pipeline/build_revoice.py", "{REL}", "--from-script"]),
         ("Frame + export", ["pipeline/polish_export.py", "{REL}"]),
     ])
 

@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { api, post, pollJob } from "../api.js";
+import { api, pollJob } from "../api.js";
 
 const LANGS = ["Hindi", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Gujarati", "Marathi",
   "Arabic", "Spanish", "French", "German", "Portuguese", "Japanese", "Korean", "Indonesian"];
 
-export function PublishDrawer({ pid, cfg, downloadKey, onClose, setStatus }) {
+export function PublishDrawer({ pid, cfg, downloadKey, onClose, setStatus, onRender }) {
   const [out, setOut] = useState(null);
   const [langs, setLangs] = useState([]);
   const [batchBusy, setBatchBusy] = useState(false);
-  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => { api(`/api/projects/${pid}/outputs`).then(setOut).catch(() => setOut({})); }, [pid, downloadKey]);
   const v = (u) => `${u}${u.includes("?") ? "&" : "?"}v=${downloadKey}`;
 
-  const reveal = async () => { try { await post(`/api/projects/${pid}/reveal`); setRevealed(true); } catch {} };
   const runBatch = async () => {
     if (!langs.length || batchBusy) return;
     setBatchBusy(true);
@@ -37,29 +35,19 @@ export function PublishDrawer({ pid, cfg, downloadKey, onClose, setStatus }) {
           <h3>Publish</h3><span className="grow" /><button className="mini" onClick={onClose}>×</button>
         </div>
         <div className="drawer-body">
-          {!rendered && <p className="hint">Export the video first to unlock downloads.</p>}
+          {!rendered && (
+            <section>
+              <p className="hint">Render the video first — captions, transcript and the guide are built from it.</p>
+              <button className="btn sm wide" onClick={onRender}>▶ Render now</button>
+            </section>
+          )}
 
           {rendered && <>
-            <section>
-              <span className="eyebrow">Video</span>
-              {out.aspects.map((a) => dl(`Video ${a.replace("x", ":")}`, `/media/${pid}/framed-${a}.mp4`))}
-              {out.platform === "darwin" && (
-                <button className="pub-item asbtn" onClick={reveal}>
-                  <span>{revealed ? "Revealed in Finder ✓" : "Reveal in Finder"}</span><span className="pub-dl">↗</span>
-                </button>
-              )}
-            </section>
             <section>
               <span className="eyebrow">Captions &amp; transcript</span>
               {dl("Captions (.srt)", `/api/projects/${pid}/captions.srt`)}
               {dl("Captions (.vtt)", `/api/projects/${pid}/captions.vtt`)}
               {dl("Transcript (.txt)", `/api/projects/${pid}/transcript.txt`)}
-            </section>
-            <section>
-              <span className="eyebrow">More</span>
-              {dl("Narration audio (.mp3)", `/api/projects/${pid}/audio.mp3`)}
-              {dl("Thumbnail (.png)", `/api/projects/${pid}/poster.png`)}
-              {dl("Looping GIF (.gif)", `/api/projects/${pid}/preview.gif`)}
             </section>
             <section>
               <span className="eyebrow">Documentation</span>
@@ -80,7 +68,7 @@ export function PublishDrawer({ pid, cfg, downloadKey, onClose, setStatus }) {
               ))}
             </div>
             <button className="btn sm wide" disabled={!langs.length || batchBusy} onClick={runBatch}>
-              {batchBusy ? "Rendering…" : `Export in ${langs.length || "N"} language(s)`}
+              {batchBusy ? "Rendering…" : `Create ${langs.length || "N"} language version(s)`}
             </button>
           </section>
         </div>

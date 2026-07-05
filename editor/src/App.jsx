@@ -7,6 +7,7 @@ import { StylePanel } from "./components/StylePanel.jsx";
 import { AudioPanel } from "./components/AudioPanel.jsx";
 import { ElementsPanel } from "./components/ElementsPanel.jsx";
 import { PublishDrawer } from "./components/PublishDrawer.jsx";
+import { ExportDrawer } from "./components/ExportDrawer.jsx";
 import { Shell } from "./components/Shell.jsx";
 import { Timeline } from "./components/Timeline.jsx";
 import { api, jput, post, pollJob } from "./api.js";
@@ -178,6 +179,7 @@ export default function App() {
   const [autoRender, setAutoRender] = useState(() => localStorage.getItem("remaster_autorender") === "1");
   const [editingName, setEditingName] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [coach, setCoach] = useState(() => !localStorage.getItem("remaster_coached"));
   const dismissCoach = () => { localStorage.setItem("remaster_coached", "1"); setCoach(false); };
 
@@ -209,7 +211,7 @@ export default function App() {
       lastJob.current = r.job;
       const end = await pollJob(r.job, (s) => {
         const step = s.status === "queued" ? "Queued — waiting for a free render slot…" : s.step || s.status;
-        setStatus((auto ? "Auto-export: " : "") + step);
+        setStatus((auto ? "Auto-render: " : "") + step);
         setProg(s.progress || 0);
         setModal((m) => (m ? { ...m, step } : m));
       });
@@ -224,12 +226,12 @@ export default function App() {
           // background pass: keep the live preview + playhead untouched, just
           // refresh the downloadable files quietly
           setGenerated(true);
-          setStatus("Auto-export complete ✓");
+          setStatus("Auto-render complete ✓");
           setModal(null);
         } else {
           await load(pid);
           setVideoKey((k) => k + 1);
-          setStatus("Export complete");
+          setStatus("Render complete");
           setModal({ phase: "done" });
         }
       } else {
@@ -256,7 +258,7 @@ export default function App() {
   };
   useEffect(() => {
     if (!autoRender || !dirty || job || !pid) return;
-    const id = setTimeout(() => { if (!busy.current) run("export", "Auto-export", { auto: true }); }, 4000);
+    const id = setTimeout(() => { if (!busy.current) run("render", "Auto-render", { auto: true }); }, 4000);
     return () => clearTimeout(id);
   }, [autoRender, dirty, job, cfg, script, pid]);
 
@@ -281,7 +283,7 @@ export default function App() {
       const cmd = e.metaKey || e.ctrlKey;
       if (cmd && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if (cmd && e.key.toLowerCase() === "s") { e.preventDefault(); saveAll().then(() => setStatus("Saved ✓")); return; }
-      if (cmd && e.key.toLowerCase() === "e") { e.preventDefault(); if (!job) run("export", "Exporting video"); return; }
+      if (cmd && e.key.toLowerCase() === "e") { e.preventDefault(); if (!job) run("render", "Rendering video"); return; }
       if (e.key === " " && !editable) {
         e.preventDefault();
         const p = playerRef.current; if (p) (p.isPlaying?.() ? p.pause() : p.play());
@@ -384,22 +386,30 @@ export default function App() {
         {modal?.phase === "running" && modal.minimized && (
           <button className="chip" onClick={() => setModal((m) => ({ ...m, minimized: false }))}>
             <span className="chip-bar"><span style={{ width: `${Math.round(prog * 100)}%` }} /></span>
-            Exporting {Math.round(prog * 100)}%
+            Rendering {Math.round(prog * 100)}%
           </button>
         )}
         {job && !modal?.minimized && <button className="btn sm danger" onClick={cancel}>Cancel</button>}
-        <label className="chk" title="Auto-render the download files in the background a few seconds after you stop editing. Only the changed stage re-renders (e.g. a sound effect = fast pass, no re-voice).">
+        <label className="chk" title="Re-render in the background a few seconds after you stop editing. Only the changed stage runs (e.g. a sound effect = fast pass, no re-voice).">
           <input type="checkbox" checked={autoRender} onChange={toggleAuto} /> Auto-render
         </label>
         <button className="btn" disabled={!!job}
-                title="Renders the final video files. Runs only the stages your edits changed — framing is instant, re-voicing only when the script or voice changed."
-                onClick={() => run("export", "Exporting video")}>⬇ Export video</button>
-        <button className="btn sm ghost" onClick={() => setShowPublish(true)}>Publish ▾</button>
+                title="Build the video from your current edits. Runs only the stages your edits changed — framing is instant, re-voicing only when the script or voice changed."
+                onClick={() => run("render", "Rendering video")}>▶ Render</button>
+        <button className="btn sm ghost" disabled={!!job} title="Download the finished video (any size) + thumbnail, GIF and audio"
+                onClick={() => setShowExport(true)}>⬇ Export ▾</button>
+        <button className="btn sm ghost" title="Captions, transcript, step-by-step guide and other-language versions"
+                onClick={() => setShowPublish(true)}>Publish ▾</button>
       </header>
 
+      {showExport && (
+        <ExportDrawer pid={pid} cfg={cfg} downloadKey={downloadKey}
+                      onClose={() => setShowExport(false)} onRender={() => { setShowExport(false); run("render", "Rendering video"); }} />
+      )}
       {showPublish && (
         <PublishDrawer pid={pid} cfg={cfg} downloadKey={downloadKey}
-                       onClose={() => setShowPublish(false)} setStatus={setStatus} />
+                       onClose={() => setShowPublish(false)} setStatus={setStatus}
+                       onRender={() => { setShowPublish(false); run("render", "Rendering video"); }} />
       )}
 
       {coach && src && (
@@ -409,7 +419,7 @@ export default function App() {
             <li><b>Script</b> — edit any line; the voice re-renders to match.</li>
             <li><b>Zooms</b> — add or drag zoom blocks on the timeline.</li>
             <li><b>Style</b> — pick a brand or preset; tweak cards & captions.</li>
-            <li><b>Export</b> — render 16:9 / 9:16, or Publish for captions & languages.</li>
+            <li><b>Render → Export → Publish</b> — build the video, download it, then share captions & other languages.</li>
           </ol>
           <button className="btn sm wide" onClick={dismissCoach}>Got it</button>
         </div>
@@ -428,15 +438,15 @@ export default function App() {
                   <button className="btn sm ghost" onClick={() => setModal((m) => ({ ...m, minimized: true }))}>
                     Run in background
                   </button>
-                  <button className="btn sm danger" onClick={cancel}>Cancel export</button>
+                  <button className="btn sm danger" onClick={cancel}>Cancel render</button>
                 </div>
               </>
             )}
             {modal.phase === "done" && (
               <>
                 <div className="modal-ok">✓</div>
-                <h3>Export complete</h3>
-                <p className="hint">Your videos are ready to download.</p>
+                <h3>Render complete</h3>
+                <p className="hint">Your video is built. Download it below, or open Publish for captions &amp; other languages.</p>
                 <div className="row gap" style={{ justifyContent: "center" }}>
                   {(cfg.aspects || ["16x9", "9x16"]).map((a) => (
                     <a key={a} className="btn" href={`/media/${pid}/framed-${a}.mp4?v=${downloadKey}`} download>
@@ -444,25 +454,29 @@ export default function App() {
                     </a>
                   ))}
                 </div>
+                <div className="row gap" style={{ justifyContent: "center" }}>
+                  <button className="btn sm ghost" onClick={() => { setModal(null); setShowExport(true); }}>All sizes &amp; files → Export</button>
+                  <button className="btn sm ghost" onClick={() => { setModal(null); setShowPublish(true); }}>Captions &amp; languages → Publish</button>
+                </div>
                 <button className="btn sm ghost" onClick={() => setModal(null)}>Close</button>
               </>
             )}
             {modal.phase === "cancelled" && (
               <>
-                <h3>Export cancelled</h3>
+                <h3>Render cancelled</h3>
                 <button className="btn sm ghost" onClick={() => setModal(null)}>Close</button>
               </>
             )}
             {modal.phase === "error" && (
               <>
                 <div className="modal-err">!</div>
-                <h3>Export failed</h3>
+                <h3>Render failed</h3>
                 <p className="modal-step">{modal.error}</p>
                 {modal.log && <pre className="joblog">{modal.log}</pre>}
                 <div className="row gap" style={{ justifyContent: "center" }}>
                   <button className="btn sm ghost" onClick={() => setModal(null)}>Close</button>
                   <button className="btn sm ghost" onClick={viewLog}>{modal.log ? "Hide log" : "View log"}</button>
-                  <button className="btn sm" onClick={() => run("export", "Exporting video")}>Retry</button>
+                  <button className="btn sm" onClick={() => run("render", "Rendering video")}>Retry</button>
                 </div>
                 <a className="hint" href={`https://github.com/issues/new?body=${encodeURIComponent("Export failed:\n" + (modal.error || ""))}`}
                    target="_blank" rel="noreferrer">Report this issue →</a>
@@ -528,7 +542,7 @@ export default function App() {
                 </a>
               ))}
               {dirty && <span className="stalehint">
-                {autoRender ? "auto-rendering…" : "edited since last export — press “Export video” to refresh"}
+                {autoRender ? "auto-rendering…" : "edited since last render — press “Render” to rebuild"}
               </span>}
             </div>
           )}
