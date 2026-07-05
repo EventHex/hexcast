@@ -13,3 +13,9 @@ voice_cache/
 central/.central-secret
 central/*.db
 *.db
+
+# desktop build artifacts (never commit the venv / .app / .dmg)
+desktop/.pack/
+desktop/build/
+desktop/dist/
+desktop/bin/
