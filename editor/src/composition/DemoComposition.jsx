@@ -42,6 +42,19 @@ function zoomAt(t, zooms) {
   return null;
 }
 
+// Clamped zoom transform that mirrors pipeline/timeline_fx.py's zoompan: the
+// scaled frame is translated so (cx,cy) is centred, but clamped to the edges so
+// the visible window never leaves the frame. transform-origin at the corner (not
+// cx%,cy%) is what lets top-left/edge targets show their real corner instead of
+// pushing it off-screen.
+function zoomStyle(z) {
+  if (!z) return undefined;
+  const s = z.s;
+  const tx = Math.min(0, Math.max(1 - s, 0.5 - z.cx * s)) * 100;
+  const ty = Math.min(0, Math.max(1 - s, 0.5 - z.cy * s)) * 100;
+  return { transform: `translate(${tx}%, ${ty}%) scale(${s})`, transformOrigin: "0 0" };
+}
+
 function captionAt(t, segments) {
   for (const sg of segments || []) {
     if (sg.rstart == null) continue;
@@ -166,9 +179,7 @@ export const DemoComposition = ({ videoSrc, script, cfg, musicSrc, pid, srcAr, s
         </Sequence>
       )}
       <Sequence from={introF} durationInFrames={contentF}>
-        <AbsoluteFill
-          style={z ? { transform: `scale(${z.s})`, transformOrigin: `${z.cx * 100}% ${z.cy * 100}%` } : undefined}
-        >
+        <AbsoluteFill style={zoomStyle(z)}>
           <Video src={videoSrc} style={{ width: "100%", height: "100%" }}
                  startFrom={Math.round(T.bakedIntro * fps)} pauseWhenBuffering />
         </AbsoluteFill>
