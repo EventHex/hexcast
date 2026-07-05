@@ -964,8 +964,11 @@ def regenerate_zooms(pid: str):
         raise HTTPException(400, "no script yet — process the recording first")
     data = json.load(open(sp, encoding="utf-8"))
     segs_all = data.get("segments") or []
+    # need text + a valid recording window to sample a frame; rendered times
+    # (rstart/rdur) aren't written back for every project, so fall back to the
+    # original start/end when they're missing.
     idx = [i for i, s in enumerate(segs_all)
-           if s.get("type") in (None, "clip") and s.get("rstart") is not None and s.get("en")]
+           if s.get("type") in (None, "clip") and s.get("en") and s.get("start") is not None]
     if not idx:
         raise HTTPException(400, "no narration segments to zoom")
     raw = next((os.path.join(d, f"raw.{e}") for e in ("webm", "mp4", "mov", "mkv")
@@ -983,12 +986,15 @@ def regenerate_zooms(pid: str):
     for k, i in enumerate(idx):
         dd = decisions[k] if k < len(decisions) else {}
         s = segs_all[i]
-        if dd.get("zoom"):
-            zooms.append({"start": s["rstart"], "end": round(s["rstart"] + (s.get("rdur") or 0), 3),
-                          "cx": dd.get("cx") or 0.5, "cy": dd.get("cy") or 0.5,
-                          "scale": dd.get("scale") or 1.4, "speed": dd.get("speed") or 3})
+        if not dd.get("zoom"):
+            continue
+        st = s["rstart"] if s.get("rstart") is not None else s.get("start")
+        dur = s["rdur"] if s.get("rdur") is not None else (s.get("end", st) - st)
+        zooms.append({"start": round(st, 3), "end": round(st + (dur or 0), 3),
+                      "cx": dd.get("cx") or 0.5, "cy": dd.get("cy") or 0.5,
+                      "scale": dd.get("scale") or 1.4, "speed": dd.get("speed") or 3})
     data["zooms"] = zooms
-    data["zoomsEdited"] = False
+    data["zoomsEdited"] = True   # explicit list — render must keep it verbatim
     json.dump(data, open(sp, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
     return {"zooms": zooms, "count": len(zooms), "segments": len(idx), "vision": has_vision}
 

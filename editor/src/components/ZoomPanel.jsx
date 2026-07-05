@@ -30,7 +30,7 @@ export function ZoomPanel({ pid, script, setScript, sel, setSel, playhead, setSt
     setStatus?.("AI is choosing zooms from your recording…");
     try {
       const r = await post(`/api/projects/${pid}/zooms/auto`);
-      setScript((s) => ({ ...s, zooms: r.zooms || [], zoomsEdited: false }));
+      setScript((s) => ({ ...s, zooms: r.zooms || [], zoomsEdited: true }));
       setSel(-1);
       if (!r.vision) setStatus?.("No AI vision key — add Gemini or Cerebras in ⚙ Settings, then retry.");
       else setStatus?.(`AI set ${r.count} zoom${r.count === 1 ? "" : "s"} across ${r.segments} lines. Re-render to apply.`);
