@@ -40,7 +40,7 @@ def _bearer(authorization: str | None) -> dict:
 @app.get("/health")
 def health():
     return {"ok": True, "service": "remaster-central",
-            "db": "postgres" if store._PG else "sqlite",
+            "db": "firestore" if store._FS else ("postgres" if store._PG else "sqlite"),
             "google": bool(os.environ.get("GOOGLE_OAUTH_CLIENT_ID"))}
 
 

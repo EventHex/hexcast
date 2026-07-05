@@ -41,6 +41,9 @@ def main() -> None:
     # the app bundle is read-only -> keep all user data in the home dir
     os.environ.setdefault("REMASTER_DATA_DIR", os.path.expanduser("~/Remaster/projects"))
     os.makedirs(os.environ["REMASTER_DATA_DIR"], exist_ok=True)
+    # central control plane for accounts + usage + auto-update (override to run
+    # against a different backend, or set to "" for self-contained local accounts)
+    os.environ.setdefault("REMASTER_AUTH_URL", "https://remaster-central-qx4ytrgsua-el.a.run.app")
 
     host, port = "127.0.0.1", int(os.environ.get("PORT", "8765"))
 
