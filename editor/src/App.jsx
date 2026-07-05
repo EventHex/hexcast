@@ -14,7 +14,7 @@ import { api, jput, post, pollJob } from "./api.js";
 
 const FPS = 30;
 
-export default function App() {
+export default function App({ user, onLogout } = {}) {
   const [pid, setPid] = useState(null);
   const [cfg, setCfg] = useState(null);
   const [script, setScript] = useState({ segments: [], zooms: [], elements: [] });
@@ -303,7 +303,7 @@ export default function App() {
   };
 
   if (noProject) {
-    return <Shell />;
+    return <Shell user={user} onLogout={onLogout} />;
   }
   if (!cfg || !src) {
     return <div className="boot">{status}</div>;

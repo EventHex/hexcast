@@ -42,6 +42,13 @@ DEFAULTS = {
 SECTIONS = ("stt", "llm", "vision", "tts", "retention", "workspace")
 
 
+def _multiuser() -> bool:
+    """Multi-user (SaaS) mode: keys are strictly per-user. The shared process
+    environment / .env must NOT act as a fallback, or one account's keys would
+    leak to everyone (and bill the host). Set via REMASTER_MULTIUSER."""
+    return bool(os.environ.get("REMASTER_MULTIUSER"))
+
+
 def _path(data_dir):
     return os.path.join(data_dir, "settings.json")
 
@@ -80,17 +87,30 @@ def save_settings(data_dir, patch: dict) -> dict:
 
 def resolve_key(data_dir, name) -> str | None:
     s = load_settings(data_dir)
-    return s["keys"].get(name) or os.environ.get(KEY_ENV[name]) or None
+    own = s["keys"].get(name)
+    if own:
+        return own
+    return None if _multiuser() else (os.environ.get(KEY_ENV[name]) or None)
 
 
 def provider_env(data_dir) -> dict:
-    """Env additions for pipeline subprocesses: resolved keys + selections."""
+    """Env additions for pipeline subprocesses: resolved keys + selections.
+
+    In multi-user mode EVERY key var is emitted — the user's value, or an empty
+    string for keys they haven't set. The empty string overrides the ambient
+    process env and, because the pipeline's load_dotenv() never overrides an
+    existing var, blocks the host's .env from leaking into a user's render."""
     s = load_settings(data_dir)
+    mu = _multiuser()
     env = {}
     for name, var in KEY_ENV.items():
-        v = s["keys"].get(name) or os.environ.get(var)
-        if v:
-            env[var] = v
+        own = s["keys"].get(name)
+        if mu:
+            env[var] = own or ""              # always present -> blocks .env fallback
+        else:
+            v = own or os.environ.get(var)
+            if v:
+                env[var] = v
     for sect in ("stt", "llm", "vision", "tts"):
         prov = s[sect].get("provider") or "auto"
         if prov != "auto":
@@ -107,9 +127,10 @@ def masked_view(data_dir) -> dict:
     s = load_settings(data_dir)
     out = {sect: dict(s[sect]) for sect in SECTIONS}
     keys = {}
+    mu = _multiuser()
     for name, var in KEY_ENV.items():
         own = s["keys"].get(name) or ""
-        env = os.environ.get(var) or ""
+        env = "" if mu else (os.environ.get(var) or "")   # no host-env fallback per-user
         val = own or env
         keys[name] = {"set": bool(val),
                       "hint": ("…" + val[-4:]) if val else "",

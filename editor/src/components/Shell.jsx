@@ -36,8 +36,13 @@ function useView() {
   return [view, go];
 }
 
-export function Shell() {
+export function Shell({ user, onLogout } = {}) {
   const [view, go] = useView();
+  const [menu, setMenu] = useState(false);
+  const logout = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
+    onLogout ? onLogout() : location.reload();
+  };
   const [stats, setStats] = useState(null);   // {count, exported, langs, bytes}
   const [anyKey, setAnyKey] = useState(null);
   const [onboard, setOnboard] = useState(false);
@@ -92,6 +97,23 @@ export function Shell() {
             {stats.langs > 0 && <><span className="dot" /> <b>{stats.langs}</b> lang</>}
             <span className="dot" /> {fmtGB(stats.bytes)}
           </span>
+        )}
+        {user && (
+          <div className="usermenu">
+            <button className="userchip" onClick={() => setMenu((m) => !m)} title={user.email}>
+              {(user.name || user.email || "?").slice(0, 1).toUpperCase()}
+            </button>
+            {menu && (
+              <>
+                <div className="menu-scrim" onClick={() => setMenu(false)} />
+                <div className="menu-pop">
+                  <div className="menu-id"><b>{user.name || "Account"}</b><span>{user.email}</span></div>
+                  <button onClick={() => { setMenu(false); go("settings"); }}>Settings &amp; API keys</button>
+                  <button onClick={logout}>Log out</button>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </header>
 

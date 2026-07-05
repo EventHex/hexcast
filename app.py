@@ -6,7 +6,7 @@ Run:  python3 -m uvicorn app:app --port 8765   (from the repo root)
 """
 from __future__ import annotations
 import os, sys, json, subprocess, threading, uuid
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request, Response
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,49 @@ sys.path.insert(0, os.path.join(ROOT, "pipeline"))
 import config as cfgmod
 import brands as brandsmod
 from providers import settings as settingsmod
+import contextvars
+import auth
+
+# Multi-user: every request runs as a signed-in user, and all project/brand/
+# settings I/O is scoped to that user's own data dir (PROJECTS/users/<uid>/).
+# The pure-ASGI middleware below sets _CUR before each request; _data() reads it.
+USERS_ROOT = os.path.join(PROJECTS, "users")
+os.makedirs(USERS_ROOT, exist_ok=True)
+# Every request is authenticated -> strict per-user BYOK: the host .env never
+# acts as a shared key fallback (set REMASTER_MULTIUSER=0 only for a private
+# single-user install that wants .env keys back).
+os.environ.setdefault("REMASTER_MULTIUSER", "1")
+auth.init(PROJECTS)
+_CUR: "contextvars.ContextVar[str | None]" = contextvars.ContextVar("uid", default=None)
+
+
+def _data() -> str:
+    """Current user's data dir. Falls back to the shared root only outside a
+    request (startup tasks pass explicit paths, so this stays safe)."""
+    uid = _CUR.get()
+    return auth.user_dir(PROJECTS, uid) if uid else PROJECTS
+
+
+_KEY_LOCK = threading.Lock()
+
+
+def _with_keys(fn):
+    """Run fn() with the current user's provider keys in os.environ, under a lock
+    so a concurrent request can't observe (or clobber into) another user's keys.
+    Renders isolate via the subprocess env; this covers the in-process API calls
+    (LLM rewrite, Soniox voice management) that read os.environ directly."""
+    add = settingsmod.provider_env(_data())
+    with _KEY_LOCK:
+        old = {k: os.environ.get(k) for k in add}
+        os.environ.update(add)
+        try:
+            return fn()
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
 VERSION = "0.1.0"
 _EXT_SEEN = {"at": 0.0}   # last time the recorder extension pinged us
@@ -35,7 +78,6 @@ def _reap_orphans():
     processes that keep writing into project files. Reap them on boot."""
     subprocess.run(["pkill", "-f", r"pipeline/(build_revoice|polish_export|transcribe)\.py"],
                    capture_output=True)
-    brandsmod.seed_default(PROJECTS, os.path.join(HERE, "assets"))
 # Allow the Chrome extension (chrome-extension://) to hand recordings straight in.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -56,6 +98,172 @@ _EDITOR_DIST = os.path.join(HERE, "editor", "dist")
 if os.path.isdir(_EDITOR_DIST):
     # React + Remotion Player editor (webstudio/editor). Build: cd editor && npm run build
     app.mount("/editor", StaticFiles(directory=_EDITOR_DIST, html=True), name="editor")
+
+# Endpoints reachable without a session. Everything else under /api or /media
+# requires a signed-in user (per-user data isolation).
+_PUBLIC = ("/api/auth/", "/api/health", "/api/ping")
+
+
+def _cookie_uid(scope) -> str | None:
+    for k, v in scope.get("headers", []):
+        if k == b"cookie":
+            for part in v.decode("latin1").split(";"):
+                name, _, val = part.strip().partition("=")
+                if name == auth.COOKIE:
+                    return auth.verify_token(val)
+    return None
+
+
+class _AuthCtx:
+    """Pure-ASGI middleware: resolves the session cookie into _CUR (contextvars
+    set here DO propagate to endpoints, unlike BaseHTTPMiddleware) and rejects
+    unauthenticated API/media calls before they touch any data path."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        uid = _cookie_uid(scope)
+        path = scope.get("path", "")
+        method = scope.get("method", "GET")
+        guarded = path.startswith("/api/") or path.startswith("/media/")
+        public = method == "OPTIONS" or any(path.startswith(p) for p in _PUBLIC)
+        if guarded and not public and not uid:
+            body = b'{"detail":"auth required"}'
+            await send({"type": "http.response.start", "status": 401,
+                        "headers": [(b"content-type", b"application/json"),
+                                    (b"content-length", str(len(body)).encode())]})
+            await send({"type": "http.response.body", "body": body})
+            return
+        token = _CUR.set(uid)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _CUR.reset(token)
+
+
+app.add_middleware(_AuthCtx)
+
+
+def _ensure_user_space(uid: str) -> str:
+    """User's data dir exists + has the seeded default brand. Idempotent."""
+    d = auth.user_dir(PROJECTS, uid)
+    os.makedirs(d, exist_ok=True)
+    brandsmod.seed_default(d, os.path.join(HERE, "assets"))
+    return d
+
+
+def _migrate_legacy(uid: str) -> None:
+    """One-time: when the very first user signs up, hand them any pre-existing
+    single-user data (loose project dirs + brands/ + settings.json) sitting at
+    the data root, so upgrading to multi-user doesn't strip the founder's work."""
+    import shutil
+    dest = auth.user_dir(PROJECTS, uid)
+    os.makedirs(dest, exist_ok=True)
+    reserved = {"users", ".secret", "remaster.db"}
+    for name in os.listdir(PROJECTS):
+        if name in reserved:
+            continue
+        src = os.path.join(PROJECTS, name)
+        tgt = os.path.join(dest, name)
+        if os.path.exists(tgt):
+            continue
+        is_project = os.path.isdir(src) and os.path.exists(os.path.join(src, "config.json"))
+        if is_project or name in ("brands", "settings.json"):
+            try:
+                shutil.move(src, tgt)
+            except Exception as e:
+                print(f"migrate skip {name}: {e}")
+    # Hand the host .env provider keys to the founder's own account — in
+    # multi-user mode .env is no longer a shared fallback, so without this the
+    # founder would lose the AI features their .env keys powered.
+    envkeys = {name: os.environ[var].strip() for name, var in settingsmod.KEY_ENV.items()
+               if os.environ.get(var, "").strip()}
+    if envkeys:
+        settingsmod.save_settings(dest, {"keys": envkeys})
+
+
+def _set_session(response: Response, uid: str) -> None:
+    response.set_cookie(auth.COOKIE, auth.make_token(uid), httponly=True,
+                        samesite="lax", max_age=auth.SESSION_DAYS * 86400, path="/")
+
+
+def _signup(email, password, name, response):
+    email = (email or "").strip().lower()
+    if "@" not in email or len(password or "") < 6:
+        raise HTTPException(400, "valid email and a 6+ char password required")
+    if auth.get_by_email(email):
+        raise HTTPException(409, "that email already has an account")
+    first = auth.count() == 0
+    uid = auth.create_user(email, name, pw=password)
+    _ensure_user_space(uid)
+    if first:
+        _migrate_legacy(uid)
+    _set_session(response, uid)
+    return auth.get(uid)
+
+
+@app.post("/api/auth/signup")
+def signup(body: dict = Body(...), response: Response = None):
+    return _signup(body.get("email"), body.get("password"), body.get("name"), response)
+
+
+@app.post("/api/auth/login")
+def login(body: dict = Body(...), response: Response = None):
+    row = auth.get_by_email(body.get("email") or "")
+    if not row or not auth.verify_pw(body.get("password") or "", row["pw_hash"]):
+        raise HTTPException(401, "wrong email or password")
+    _ensure_user_space(row["id"])
+    _set_session(response, row["id"])
+    return auth.get(row["id"])
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(auth.COOKIE, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def me():
+    uid = _CUR.get()
+    return {"user": auth.get(uid) if uid else None, "google": auth.google_configured()}
+
+
+@app.get("/api/auth/google/login")
+def google_login(request: Request):
+    if not auth.google_configured():
+        raise HTTPException(400, "Google sign-in is not configured on this server")
+    redirect_uri = str(request.base_url).rstrip("/") + "/api/auth/google/callback"
+    url = auth.google_auth_url(redirect_uri, state="remaster")
+    return RedirectResponse(url)
+
+
+@app.get("/api/auth/google/callback")
+def google_callback(request: Request, code: str = "", response: Response = None):
+    if not auth.google_configured() or not code:
+        raise HTTPException(400, "Google sign-in unavailable")
+    redirect_uri = str(request.base_url).rstrip("/") + "/api/auth/google/callback"
+    try:
+        prof = auth.google_exchange(code, redirect_uri)
+    except Exception as e:
+        raise HTTPException(400, f"Google sign-in failed: {e}")
+    row = auth.get_by_google(prof["sub"]) or (auth.get_by_email(prof["email"]) if prof.get("email") else None)
+    if row:
+        uid = row["id"]
+        if not row["google_sub"]:
+            auth.set_google_sub(uid, prof["sub"])
+    else:
+        first = auth.count() == 0
+        uid = auth.create_user(prof["email"] or f'{prof["sub"]}@google', prof.get("name"), google_sub=prof["sub"])
+        _ensure_user_space(uid)
+        if first:
+            _migrate_legacy(uid)
+    resp = RedirectResponse("/editor/")
+    _set_session(resp, uid)
+    return resp
 JOBS: dict = {}
 JOBS_MAX = 200                      # keep the newest finished jobs, evict the rest
 RENDERS = threading.Semaphore(2)    # at most 2 concurrent renders machine-wide
@@ -71,7 +279,7 @@ def _proj_lock(d: str) -> threading.Lock:
 def proj_dir(pid: str) -> str:
     if "/" in pid or ".." in pid:
         raise HTTPException(400, "bad id")
-    d = os.path.join(PROJECTS, pid)
+    d = os.path.join(_data(), pid)
     if not os.path.isdir(d):
         raise HTTPException(404, "no such project")
     return d
@@ -182,21 +390,29 @@ def prune_project(d, keep_raw=False):
 
 
 def auto_prune():
-    """Retention policy from settings: prune exported projects untouched for N days."""
-    days = int((settingsmod.load_settings(PROJECTS).get("retention") or {}).get("days") or 0)
-    if days <= 0:
-        return
+    """Retention policy from each user's settings: prune exported projects
+    untouched for N days. Startup task -> walks every user's data dir explicitly
+    (no request context, so it can't rely on _data())."""
     import time as _t
-    cutoff = _t.time() - days * 86400
-    for pid in os.listdir(PROJECTS):
-        d = os.path.join(PROJECTS, pid)
-        if not os.path.isdir(d) or pid == "brands":
+    if not os.path.isdir(USERS_ROOT):
+        return
+    for uid in os.listdir(USERS_ROOT):
+        udir = os.path.join(USERS_ROOT, uid)
+        if not os.path.isdir(udir):
             continue
-        exported = any(f.startswith("framed-") for f in os.listdir(d))
-        if exported and os.path.getmtime(d) < cutoff:
-            freed = prune_project(d)
-            if freed:
-                print(f"retention: pruned {pid} ({freed // 1048576} MB)")
+        days = int((settingsmod.load_settings(udir).get("retention") or {}).get("days") or 0)
+        if days <= 0:
+            continue
+        cutoff = _t.time() - days * 86400
+        for pid in os.listdir(udir):
+            d = os.path.join(udir, pid)
+            if not os.path.isdir(d) or pid == "brands":
+                continue
+            exported = any(f.startswith("framed-") for f in os.listdir(d))
+            if exported and os.path.getmtime(d) < cutoff:
+                freed = prune_project(d)
+                if freed:
+                    print(f"retention: pruned {uid}/{pid} ({freed // 1048576} MB)")
 
 
 @app.on_event("startup")
@@ -207,8 +423,8 @@ def _startup_prune():
 @app.get("/api/projects")
 def list_projects():
     out = []
-    for pid in os.listdir(PROJECTS):
-        d = os.path.join(PROJECTS, pid)
+    for pid in os.listdir(_data()):
+        d = os.path.join(_data(), pid)
         if not os.path.isdir(d) or pid == "brands":
             continue
         cfgp = os.path.join(d, "config.json")
@@ -242,7 +458,7 @@ def duplicate_project(pid: str):
     """New project inheriting this one's settings/brand (no media)."""
     src = proj_dir(pid)
     new = "web-" + uuid.uuid4().hex[:8]
-    nd = os.path.join(PROJECTS, new)
+    nd = os.path.join(_data(), new)
     os.makedirs(nd, exist_ok=True)
     c = cfgmod.load(src)
     c["name"] = (c.get("name") or pid) + " copy"
@@ -284,8 +500,8 @@ def prune(body: dict = Body(default={})):
     import time as _t
     cutoff = _t.time() - days * 86400 if days else None
     hits = []
-    for pid in (ids or os.listdir(PROJECTS)):
-        d = os.path.join(PROJECTS, pid)
+    for pid in (ids or os.listdir(_data())):
+        d = os.path.join(_data(), pid)
         if not os.path.isdir(d) or pid == "brands":
             continue
         if cutoff and os.path.getmtime(d) >= cutoff:
@@ -300,8 +516,8 @@ def prune(body: dict = Body(default={})):
 @app.post("/api/projects")
 def create_project():
     pid = "web-" + uuid.uuid4().hex[:8]
-    os.makedirs(os.path.join(PROJECTS, pid), exist_ok=True)
-    cfgmod.save(os.path.join(PROJECTS, pid), {})
+    os.makedirs(os.path.join(_data(), pid), exist_ok=True)
+    cfgmod.save(os.path.join(_data(), pid), {})
     return {"id": pid}
 
 
@@ -462,9 +678,8 @@ def rewrite_script(pid: str):
         return data
     sys.path.insert(0, os.path.join(ROOT, "pipeline"))
     import cerebras_clean
-    os.environ.update(settingsmod.provider_env(PROJECTS))  # in-process call: same key routing as subprocesses
     cfg = cfgmod.load(d)
-    new = cerebras_clean.rewrite_lines([segs[i]["en"] for i in idx], glossary=cfg.get("glossary"))
+    new = _with_keys(lambda: cerebras_clean.rewrite_lines([segs[i]["en"] for i in idx], glossary=cfg.get("glossary")))
     for j, i in enumerate(idx):
         segs[i]["en"] = new[j]
     json.dump(data, open(p, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
@@ -507,7 +722,7 @@ def _sigs(cfg, script):
       frame  -> theme plate / background / shadow / logo framing
     """
     segs = script.get("segments") or []
-    tts_provider = settingsmod.provider_env(PROJECTS).get("REMASTER_TTS_PROVIDER", "auto")
+    tts_provider = settingsmod.provider_env(_data()).get("REMASTER_TTS_PROVIDER", "auto")
     return {
         "voiced": _sig(cfg.get("voice"), cfg.get("lang"), cfg.get("original_voice"), tts_provider,
                        [s.get("en") for s in segs], [s.get("type") for s in segs],
@@ -594,7 +809,7 @@ def _spawn(d, steps_defs, record_state=False):
     steps = [(desc, [sys.executable] + [a.replace("{REL}", d) for a in args]) for desc, args in steps_defs]
     threading.Thread(target=run_job, args=(job, steps, ROOT, d),
                      kwargs={"record_state": record_state,
-                             "env": settingsmod.provider_env(PROJECTS)}, daemon=True).start()
+                             "env": settingsmod.provider_env(_data())}, daemon=True).start()
     return {"job": job}
 
 
@@ -628,7 +843,7 @@ def export_langs(pid: str, body: dict = Body(...)):
     steps = []
     for lang in langs:
         slug = re.sub(r"[^a-z]", "", lang.lower())[:12]
-        nd = os.path.join(PROJECTS, f"{pid}-{slug}")
+        nd = os.path.join(_data(), f"{pid}-{slug}")
         os.makedirs(nd, exist_ok=True)
         c = dict(src_cfg)
         c["lang"] = lang
@@ -726,7 +941,7 @@ def make_sample():
         raise HTTPException(404, "no bundled sample")
     import shutil
     pid = "sample-" + uuid.uuid4().hex[:6]
-    d = os.path.join(PROJECTS, pid)
+    d = os.path.join(_data(), pid)
     shutil.copytree(_SAMPLE_DIR, d)
     c = cfgmod.load(d); c["name"] = "Sample demo"; cfgmod.save(d, c)
     return {"id": pid}
@@ -734,13 +949,13 @@ def make_sample():
 
 @app.get("/api/brands")
 def brands_list():
-    return {"brands": brandsmod.list_brands(PROJECTS)}
+    return {"brands": brandsmod.list_brands(_data())}
 
 
 @app.get("/api/brands/{bid}")
 def brands_get(bid: str):
     try:
-        return brandsmod.get_brand(PROJECTS, bid)
+        return brandsmod.get_brand(_data(), bid)
     except (FileNotFoundError, ValueError):
         raise HTTPException(404, "no such brand")
 
@@ -748,24 +963,24 @@ def brands_get(bid: str):
 @app.post("/api/brands/{bid}/logo")
 async def brand_logo(bid: str, file: UploadFile = File(...)):
     try:
-        d = brandsmod._bdir(PROJECTS, bid)
+        d = brandsmod._bdir(_data(), bid)
     except ValueError:
         raise HTTPException(400, "bad brand id")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, "logo.png")
     with open(path, "wb") as f:
         f.write(await file.read())
-    b = brandsmod.get_brand(PROJECTS, bid)
+    b = brandsmod.get_brand(_data(), bid)
     cfg = b.get("config") or {}
     cfg["logo"] = path
-    brandsmod.save_brand(PROJECTS, bid, b.get("name"), cfg)
+    brandsmod.save_brand(_data(), bid, b.get("name"), cfg)
     return {"ok": True, "logo": path}
 
 
 @app.get("/api/brands/{bid}/logo")
 def brand_logo_get(bid: str):
     try:
-        p = os.path.join(brandsmod._bdir(PROJECTS, bid), "logo.png")
+        p = os.path.join(brandsmod._bdir(_data(), bid), "logo.png")
     except ValueError:
         raise HTTPException(400, "bad brand id")
     if not os.path.isfile(p):
@@ -775,24 +990,24 @@ def brand_logo_get(bid: str):
 
 @app.post("/api/brands")
 def brands_create(body: dict = Body(...)):
-    bid = brandsmod.create_brand(PROJECTS, body.get("name"), body.get("config"))
+    bid = brandsmod.create_brand(_data(), body.get("name"), body.get("config"))
     return {"id": bid}
 
 
 @app.put("/api/brands/{bid}")
 def brands_update(bid: str, body: dict = Body(...)):
     try:
-        cur = brandsmod.get_brand(PROJECTS, bid)
+        cur = brandsmod.get_brand(_data(), bid)
     except (FileNotFoundError, ValueError):
         raise HTTPException(404, "no such brand")
     cfg = {**(cur.get("config") or {}), **(body.get("config") or {})}
-    return brandsmod.save_brand(PROJECTS, bid, body.get("name") or cur.get("name"), cfg)
+    return brandsmod.save_brand(_data(), bid, body.get("name") or cur.get("name"), cfg)
 
 
 @app.delete("/api/brands/{bid}")
 def brands_delete(bid: str):
     try:
-        brandsmod.delete_brand(PROJECTS, bid)
+        brandsmod.delete_brand(_data(), bid)
     except ValueError:
         raise HTTPException(400, "bad brand id")
     return {"ok": True}
@@ -802,7 +1017,7 @@ def brands_delete(bid: str):
 def apply_brand(pid: str, bid: str):
     d = proj_dir(pid)
     try:
-        return brandsmod.apply_to_project(PROJECTS, bid, d, cfgmod)
+        return brandsmod.apply_to_project(_data(), bid, d, cfgmod)
     except (FileNotFoundError, ValueError):
         raise HTTPException(404, "no such brand")
 
@@ -810,17 +1025,16 @@ def apply_brand(pid: str, bid: str):
 @app.post("/api/brands/from-project/{pid}")
 def brand_from_project(pid: str, body: dict = Body(...)):
     d = proj_dir(pid)
-    bid = brandsmod.from_project(PROJECTS, body.get("name") or "My brand", d, cfgmod)
+    bid = brandsmod.from_project(_data(), body.get("name") or "My brand", d, cfgmod)
     return {"id": bid}
 
 
 @app.get("/api/voices")
 def voices(provider: str = "elevenlabs"):
     """Live voice list for pickable TTS providers (id, name, preview_url)."""
-    os.environ.update(settingsmod.provider_env(PROJECTS))
     from providers import tts as ttsmod
     try:
-        return {"voices": ttsmod.list_voices(provider)}
+        return _with_keys(lambda: {"voices": ttsmod.list_voices(provider)})
     except Exception as e:
         raise HTTPException(400, str(e))
 
@@ -857,7 +1071,6 @@ async def clone_voice(name: str, file: UploadFile = File(...)):
     """Create a Soniox cloned voice from a short reference clip (few sec–20s,
     ≤10 MB). Accepts an uploaded file or an in-browser recording; the clip is
     normalized to mp3 first. Returns {id, name}; the id is used as the TTS voice."""
-    os.environ.update(settingsmod.provider_env(PROJECTS))
     from tools.audio import soniox_tts
     data = await file.read()
     if len(data) > 25 * 1024 * 1024:
@@ -866,17 +1079,16 @@ async def clone_voice(name: str, file: UploadFile = File(...)):
     if len(clip) > 10 * 1024 * 1024:
         raise HTTPException(400, "sample too large after encoding (max 10 MB)")
     try:
-        return soniox_tts.create_cloned_voice(name.strip() or "My voice", clip, fname)
+        return _with_keys(lambda: soniox_tts.create_cloned_voice(name.strip() or "My voice", clip, fname))
     except Exception as e:
         raise HTTPException(400, str(e))
 
 
 @app.delete("/api/voices/clone/{voice_id}")
 def delete_clone(voice_id: str):
-    os.environ.update(settingsmod.provider_env(PROJECTS))
     from tools.audio import soniox_tts
     try:
-        soniox_tts.delete_cloned_voice(voice_id)
+        _with_keys(lambda: soniox_tts.delete_cloned_voice(voice_id))
         return {"ok": True}
     except Exception as e:
         raise HTTPException(400, str(e))
@@ -884,13 +1096,13 @@ def delete_clone(voice_id: str):
 
 @app.get("/api/settings")
 def get_settings():
-    return settingsmod.masked_view(PROJECTS)
+    return settingsmod.masked_view(_data())
 
 
 @app.put("/api/settings")
 def put_settings(body: dict = Body(...)):
-    settingsmod.save_settings(PROJECTS, body)
-    return settingsmod.masked_view(PROJECTS)
+    settingsmod.save_settings(_data(), body)
+    return settingsmod.masked_view(_data())
 
 
 @app.get("/api/jobs/{job}")
@@ -948,9 +1160,8 @@ def regenerate_zooms(pid: str):
     blocks. Does NOT re-render the video — the editor drops the zooms onto the
     timeline live; the user renders when happy. Needs a vision key (Gemini /
     Cerebras); without one it reports 0 so the UI can prompt for a key."""
-    env = settingsmod.provider_env(PROJECTS)
-    os.environ.update(env)
-    has_vision = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("CEREBRAS_API_KEY"))
+    env = settingsmod.provider_env(_data())
+    has_vision = bool(env.get("GEMINI_API_KEY") or env.get("CEREBRAS_API_KEY"))
     d = proj_dir(pid)
     sp = os.path.join(d, "script.json")
     if not os.path.exists(sp):
@@ -972,7 +1183,7 @@ def regenerate_zooms(pid: str):
     sub = [segs_all[i] for i in idx]
     en = [segs_all[i].get("en", "") for i in idx]
     try:
-        decisions = decide(raw, sub, en, d)
+        decisions = _with_keys(lambda: decide(raw, sub, en, d))
     except Exception as e:
         raise HTTPException(400, f"zoom AI failed: {e}")
     zooms = []
