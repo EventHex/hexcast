@@ -45,8 +45,11 @@ const EN_VOICES = {
   ],
 };
 const ALL_EN = Object.values(EN_VOICES).flat().map(([v]) => v);
+const EN_LABEL = Object.fromEntries(Object.values(EN_VOICES).flat());
 
-export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked, setStatus }) {
+const PROV_LABEL = { google: "Google Chirp3-HD", elevenlabs: "ElevenLabs", soniox: "Soniox", piper: "Piper", original: "your recorded voice" };
+
+export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked, setStatus, onProviderChange, onVoicesLoaded }) {
   const [tracks, setTracks] = useState([]);
   const [sfxLib, setSfxLib] = useState([]);
   const [playing, setPlaying] = useState(null);
@@ -56,9 +59,11 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
   const [snVoices, setSnVoices] = useState([]);  // Soniox built-in + cloned voices
   const [cloneName, setCloneName] = useState("");
   const [cloneBusy, setCloneBusy] = useState("");
+  const [recSecs, setRecSecs] = useState(-1);    // -1 = not recording, >=0 = elapsed
   const audioRef = useRef(null);
   const fileRef = useRef(null);
   const cloneRef = useRef(null);
+  const recRef = useRef(null);                    // { mr, chunks, timer }
   useEffect(() => {
     api("/api/music").then((r) => setTracks(r.tracks || [])).catch(() => {});
     api("/api/sfx").then((r) => setSfxLib(r.sfx || [])).catch(() => {});
@@ -68,10 +73,18 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
   const effTts = tts === "auto" ? (keysSet.google?.set ? "google" : "original") : tts;
   useEffect(() => {
     if (effTts === "elevenlabs" && keysSet.elevenlabs?.set)
-      api("/api/voices?provider=elevenlabs").then((r) => setElVoices(r.voices || [])).catch(() => setElVoices([]));
+      api("/api/voices?provider=elevenlabs")
+        .then((r) => { setElVoices(r.voices || []); onVoicesLoaded?.(r.voices || []); })
+        .catch(() => setElVoices([]));
   }, [effTts, keysSet]);
-  const loadSoniox = () =>
-    api("/api/voices?provider=soniox").then((r) => setSnVoices(r.voices || [])).catch(() => setSnVoices([]));
+  const loadSoniox = async () => {
+    try {
+      const r = await api("/api/voices?provider=soniox");
+      setSnVoices(r.voices || []);
+      onVoicesLoaded?.(r.voices || []);
+      return r.voices || [];
+    } catch { setSnVoices([]); return []; }
+  };
   useEffect(() => {
     if (effTts === "soniox" && keysSet.soniox?.set) loadSoniox();
   }, [effTts, keysSet]);
@@ -81,29 +94,66 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
     snVoices.forEach((v) => { (m[v.group] = m[v.group] || []).push(v); });
     return Object.entries(m);
   };
-  // clone: upload a short clip -> new voice id, then auto-select it
-  const doClone = async (e) => {
-    const f = e.target.files[0]; e.target.value = "";
-    if (!f) return;
+  // pick a narration voice: apply, and give the user an unmistakable signal it
+  // changed (the render voice only updates on the next render).
+  const pickVoice = (id, label) => {
+    // choosing an AI voice implies you don't want the raw recording — clear the
+    // override so the pick actually takes effect (and the header badge updates)
+    u({ voice: id, original_voice: false });
+    setStatus?.(`Narration voice → ${label || id}. Re-render to apply.`);
+  };
+  // clone: upload OR record a short clip -> new voice id, then auto-select it
+  const uploadClone = async (blob, filename) => {
     const nm = cloneName.trim() || "My voice";
     setCloneBusy("Cloning your voice… (~15s)");
     try {
-      const fd = new FormData(); fd.append("file", f);
+      const fd = new FormData(); fd.append("file", blob, filename);
       const r = await fetch(`/api/voices/clone?name=${encodeURIComponent(nm)}`, { method: "POST", body: fd });
       if (!r.ok) throw new Error(await r.text());
       const v = await r.json();
       setCloneName(""); setCloneBusy("");
       await loadSoniox();
-      u({ voice: v.id });
+      pickVoice(v.id, v.name);
     } catch { setCloneBusy("Clone failed — check the clip and your Soniox key."); }
   };
+  const doClone = async (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (f) uploadClone(f, f.name);
+  };
+  // record from the mic, auto-stop at 20s, then clone the captured clip
+  const startRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      const chunks = [];
+      mr.ondataavailable = (ev) => { if (ev.data.size) chunks.push(ev.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        clearInterval(recRef.current?.timer);
+        setRecSecs(-1);
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        uploadClone(blob, "recording.webm");
+      };
+      const timer = setInterval(() => setRecSecs((s) => {
+        if (s + 1 >= 20) { try { mr.stop(); } catch {} }
+        return s + 1;
+      }), 1000);
+      recRef.current = { mr, chunks, timer };
+      mr.start();
+      setRecSecs(0);
+    } catch { setCloneBusy("Mic blocked — allow microphone access, or upload a file."); }
+  };
+  const stopRec = () => { try { recRef.current?.mr.stop(); } catch {} };
   const delClone = async (id) => {
     try { await api(`/api/voices/clone/${id}`, { method: "DELETE" }); } catch {}
-    if (cfg.voice === id) u({ voice: "Priya" });
+    if (cfg.voice === id) pickVoice("Priya", "Priya");
     await loadSoniox();
   };
   const setProvider = async (v) => {
     setTts(v);
+    onProviderChange?.(v);
+    const eff = v === "auto" ? (keysSet.google?.set ? "google" : "original") : v;
+    setStatus?.(`Voice provider → ${PROV_LABEL[eff] || eff}. Re-render to apply.`);
     try { await jput("/api/settings", { tts: { provider: v } }); } catch {}
   };
 
@@ -201,7 +251,8 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
       {effTts === "google" && lang === "English" && (
         <label className="lab col">Narration voice
           <div className="row gap">
-            <select value={cfg.voice || ALL_EN[0]} onChange={(e) => u({ voice: e.target.value })}>
+            <select value={cfg.voice || ALL_EN[0]}
+                    onChange={(e) => pickVoice(e.target.value, EN_LABEL[e.target.value])}>
               {Object.entries(EN_VOICES).map(([group, vs]) => (
                 <optgroup key={group} label={group}>
                   {vs.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
@@ -219,7 +270,8 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
         keysSet.elevenlabs?.set ? (
           <label className="lab col">Narration voice
             <div className="row gap">
-              <select value={cfg.voice || ""} onChange={(e) => u({ voice: e.target.value })}>
+              <select value={cfg.voice || ""}
+                      onChange={(e) => pickVoice(e.target.value, e.target.value ? (elVoices.find((x) => x.id === e.target.value)?.name || e.target.value) : "Default (Rachel)")}>
                 <option value="">Default (Rachel)</option>
                 {elVoices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
@@ -243,7 +295,7 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
             <label className="lab col">Narration voice
               {snVoices.length ? (
                 <select value={snIds.includes(cfg.voice) ? cfg.voice : "Priya"}
-                        onChange={(e) => u({ voice: e.target.value })}>
+                        onChange={(e) => pickVoice(e.target.value, snVoices.find((x) => x.id === e.target.value)?.name)}>
                   {snGroups().map(([g, vs]) => (
                     <optgroup key={g} label={g}>
                       {vs.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -258,11 +310,21 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
               <label className="lab col">Voice name
                 <input value={cloneName} placeholder="My voice"
                        onChange={(e) => setCloneName(e.target.value)} /></label>
-              <button className="btn sm ghost" style={{ width: "100%", marginTop: 4 }}
-                      onClick={() => cloneRef.current.click()}>＋ Upload a 10–20s clip</button>
+              {recSecs < 0 ? (
+                <div className="row gap" style={{ marginTop: 4 }}>
+                  <button className="btn sm ghost" style={{ flex: 1 }} disabled={!!cloneBusy}
+                          onClick={startRec}>🎙 Record</button>
+                  <button className="btn sm ghost" style={{ flex: 1 }} disabled={!!cloneBusy}
+                          onClick={() => cloneRef.current.click()}>＋ Upload clip</button>
+                </div>
+              ) : (
+                <button className="btn sm danger" style={{ width: "100%", marginTop: 4 }} onClick={stopRec}>
+                  ⏹ Stop &amp; clone — {recSecs}s / 20s
+                </button>
+              )}
               <input ref={cloneRef} type="file" accept="audio/*" hidden onChange={doClone} />
               {cloneBusy && <p className="hint">{cloneBusy}</p>}
-              <p className="hint">Clean recording, one speaker, up to 20s (≤10 MB). It appears under “My cloned voices”.</p>
+              <p className="hint">Record straight from your mic or upload a clip. Clean audio, one speaker, up to 20s. It appears under “My cloned voices”.</p>
               {snVoices.filter((v) => v.cloned).map((v) => (
                 <div className="row gap" key={v.id}>
                   <span className="tag">{v.name}</span><span className="grow" />
@@ -286,7 +348,9 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
         <p className="hint">Exports keep your recorded narration as-is — no revoicing.</p>
       )}
       <label className="chk"><input type="checkbox" checked={!!cfg.original_voice}
-             onChange={(e) => u({ original_voice: e.target.checked })} /> Use my original recorded voice</label>
+             onChange={(e) => { u({ original_voice: e.target.checked });
+               setStatus?.(e.target.checked ? "Voice → your original recording. Re-render to apply."
+                                             : "Voice → AI narration. Re-render to apply."); }} /> Use my original recorded voice</label>
 
       <hr className="sep" />
       <span className="eyebrow">Music</span>

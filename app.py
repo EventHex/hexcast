@@ -832,18 +832,48 @@ def voices(provider: str = "elevenlabs"):
         raise HTTPException(400, str(e))
 
 
+def _normalize_clip(data: bytes) -> tuple[bytes, str]:
+    """Transcode any uploaded/recorded audio to a clean mp3 (mono, 24 kHz,
+    trimmed to 20s) so Soniox gets a consistent format — browser mic recordings
+    are webm/opus, which we can't hand to the API raw. Falls back to the
+    original bytes if ffmpeg isn't usable."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".in", delete=False) as fi:
+        fi.write(data); src = fi.name
+    dst = src + ".mp3"
+    try:
+        r = subprocess.run(["ffmpeg", "-y", "-i", src, "-t", "20", "-ac", "1",
+                            "-ar", "24000", "-codec:a", "libmp3lame", "-q:a", "3", dst],
+                           capture_output=True)
+        if r.returncode == 0 and os.path.exists(dst) and os.path.getsize(dst) > 0:
+            with open(dst, "rb") as f:
+                return f.read(), "sample.mp3"
+    except Exception:
+        pass
+    finally:
+        for p in (src, dst):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    return data, "sample.mp3"
+
+
 @app.post("/api/voices/clone")
 async def clone_voice(name: str, file: UploadFile = File(...)):
     """Create a Soniox cloned voice from a short reference clip (few sec–20s,
-    ≤10 MB). Returns {id, name}; the id is used as the TTS voice."""
+    ≤10 MB). Accepts an uploaded file or an in-browser recording; the clip is
+    normalized to mp3 first. Returns {id, name}; the id is used as the TTS voice."""
     os.environ.update(settingsmod.provider_env(PROJECTS))
     from tools.audio import soniox_tts
     data = await file.read()
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(400, "sample too large (max 10 MB)")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(400, "sample too large")
+    clip, fname = _normalize_clip(data)
+    if len(clip) > 10 * 1024 * 1024:
+        raise HTTPException(400, "sample too large after encoding (max 10 MB)")
     try:
-        return soniox_tts.create_cloned_voice(name.strip() or "My voice", data,
-                                              file.filename or "sample.mp3")
+        return soniox_tts.create_cloned_voice(name.strip() or "My voice", clip, fname)
     except Exception as e:
         raise HTTPException(400, str(e))
 

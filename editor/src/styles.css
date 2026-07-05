@@ -90,6 +90,10 @@ textarea, input, select { background: var(--bg); border: 1px solid var(--line); 
 .pbar > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s ease; }
 .chip { display: inline-flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--line);
   color: var(--text); border-radius: 20px; padding: 5px 12px 5px 6px; font: 600 12px inherit; cursor: pointer; }
+.voicebadge { display: inline-flex; align-items: center; gap: 5px; background: var(--panel2); border: 1px solid var(--line);
+  color: var(--dim); border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.voicebadge b { color: var(--text); font-weight: 700; }
+.voicebadge:hover { border-color: var(--accent); color: var(--text); }
 .chip-bar { width: 46px; height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; }
 .chip-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
 .wave { display: flex; gap: 5px; align-items: flex-end; height: 30px; }

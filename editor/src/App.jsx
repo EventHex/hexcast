@@ -34,6 +34,21 @@ export default function App() {
   const editSeq = useRef(0);   // bumped on every edit; auto-render checks it to detect mid-render edits
   const hist = useRef({ past: [], future: [], lastAt: 0, applying: false });
   const snap = useRef({});     // current committed {cfg, script}, read by history
+  // narration voice/provider shown in the header badge (kept in sync with the
+  // Audio panel via onProviderChange / onVoicesLoaded)
+  const [ttsProvider, setTtsProvider] = useState("auto");
+  const [googleSet, setGoogleSet] = useState(false);
+  const [voiceList, setVoiceList] = useState([]);
+  useEffect(() => {
+    api("/api/settings").then((v) => {
+      setTtsProvider(v.tts?.provider || "auto"); setGoogleSet(!!v.keys?.google?.set);
+    }).catch(() => {});
+  }, []);
+  const effProvider = ttsProvider === "auto" ? (googleSet ? "google" : "original") : ttsProvider;
+  useEffect(() => {
+    if (effProvider === "elevenlabs" || effProvider === "soniox")
+      api(`/api/voices?provider=${effProvider}`).then((r) => setVoiceList(r.voices || [])).catch(() => setVoiceList([]));
+  }, [effProvider]);
 
   // snapshot the pre-edit state, coalescing rapid edits into one undo step
   const pushHistory = () => {
@@ -350,6 +365,21 @@ export default function App() {
           <span className="projname" title="Click to rename" onClick={() => setEditingName(true)}>{cfg.name || pid}</span>
         )}
         <span className="grow" />
+        {(() => {
+          const PL = { google: "Google", elevenlabs: "ElevenLabs", soniox: "Soniox", piper: "Piper", original: "Original" };
+          let vn;
+          if (cfg.original_voice || effProvider === "original") vn = "your recording";
+          else {
+            const v = cfg.voice || "";
+            if (effProvider === "google") { const p = v.split("-"); vn = p[p.length - 1] || v; }
+            else if (effProvider === "piper") vn = v || "default";
+            else vn = voiceList.find((x) => x.id === v)?.name || (/^[0-9a-f-]{20,}$/i.test(v) ? "cloned voice" : (v || "default"));
+          }
+          return (
+            <button className="voicebadge" title="Narration voice used when you render — click to change"
+                    onClick={() => setTab("audio")}>🎙 <b>{PL[effProvider] || effProvider}</b> · {vn}</button>
+          );
+        })()}
         <span className="status">{status}</span>
         {modal?.phase === "running" && modal.minimized && (
           <button className="chip" onClick={() => setModal((m) => ({ ...m, minimized: false }))}>
@@ -524,7 +554,8 @@ export default function App() {
           )}
           {tab === "audio" && (
             <AudioPanel pid={pid} cfg={cfg} setCfg={setCfgD} script={script} setScript={setScriptD}
-                        playheadBaked={playheadBaked} setStatus={setStatus} />
+                        playheadBaked={playheadBaked} setStatus={setStatus}
+                        onProviderChange={setTtsProvider} onVoicesLoaded={setVoiceList} />
           )}
           {tab === "style" && <StylePanel pid={pid} cfg={cfg} setCfg={setCfgD} />}
         </aside>
