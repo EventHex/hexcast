@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY store.py main.py ./
+COPY store.py main.py update_manifest.json ./
 
 # Cloud Run provides $PORT (default 8080).
 ENV PORT=8080

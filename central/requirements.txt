@@ -3,3 +3,5 @@ uvicorn>=0.29
 requests>=2.31
 # Postgres / Cloud SQL driver — only needed when DATABASE_URL is a postgres URL
 psycopg[binary]>=3.1
+# Firestore backend — used when REMASTER_BACKEND=firestore (the Cloud Run pick)
+google-cloud-firestore>=2.13

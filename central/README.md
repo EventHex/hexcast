@@ -14,6 +14,7 @@ calls this service to sign in, verify a session, and report usage for metering.
 | GET  | `/auth/me` | `Bearer` → `{user, usage}` |
 | POST | `/usage/report` | `Bearer` + `{kind}` → records an event, returns usage |
 | GET  | `/auth/google/login` · `/auth/google/callback` | optional Google sign-in (loopback) |
+| GET  | `/updates/latest` | desktop auto-update manifest `{version,url,notes}` |
 
 Tokens are HMAC-signed with `SECRET_KEY` (server-only), so the desktop client
 can't forge one — it verifies online via `/auth/verify`.
@@ -26,14 +27,27 @@ uvicorn main:app --port 8790
 # → SQLite file central.db, dev secret in .central-secret
 ```
 
-## Deploy to GCP (Cloud Run + Cloud SQL Postgres)
+## Deploy to GCP (Cloud Run + Firestore) — the current setup
+Backend is Firestore (`REMASTER_BACKEND=firestore`): serverless, scales to
+zero, no idle cost. The DB already exists (asia-south1, Native mode). Deploy:
 ```bash
-# 1. Cloud SQL Postgres instance + database "remaster", note the connection name.
-# 2. Build + deploy:
-gcloud run deploy remaster-central \
-  --source . --region <REGION> --allow-unauthenticated \
-  --add-cloudsql-instances <PROJECT:REGION:INSTANCE> \
-  --set-env-vars SECRET_KEY=<hex32>,DATABASE_URL=postgresql://USER:PASS@/remaster?host=/cloudsql/<PROJECT:REGION:INSTANCE>
+cd central && ./deploy.sh
 ```
-Cloud Run scales to zero — you pay only when someone signs in / reports usage.
-Point the desktop app at the resulting URL via `REMASTER_AUTH_URL`.
+`deploy.sh` grants the runtime service account `roles/datastore.user`, ensures a
+stable session secret (`.central-secret`, gitignored), then builds + deploys
+`--allow-unauthenticated` (the service must be public — the desktop app calls it
+from users' machines with no GCP credentials). It prints the URL and hits
+`/health`. Point the desktop app at that URL via `REMASTER_AUTH_URL`.
+
+Bump the desktop version on a new release without redeploying code:
+```bash
+gcloud run services update remaster-central --region asia-south1 \
+  --update-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/Remaster.dmg
+```
+
+### Alternative: Cloud SQL Postgres
+Set `DATABASE_URL=postgresql://…` (and `--add-cloudsql-instances`) instead of
+`REMASTER_BACKEND=firestore`. `store.py` supports both.
+
+> Hardening (later): move `SECRET_KEY` from an env var into Secret Manager
+> (`--set-secrets SECRET_KEY=remaster-secret:latest`).
