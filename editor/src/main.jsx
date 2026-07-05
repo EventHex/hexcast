@@ -4,6 +4,11 @@ import App from "./App.jsx";
 import { AuthPage } from "./components/AuthPage.jsx";
 import "./styles.css";
 
+// Apply the saved theme before first paint (no flash). If unset, styles.css
+// falls back to the OS preference via prefers-color-scheme.
+const _theme = localStorage.getItem("remaster_theme");
+if (_theme) document.documentElement.setAttribute("data-theme", _theme);
+
 // Auth gate: nothing renders until we know who (if anyone) is signed in.
 function Root() {
   const [me, setMe] = useState(undefined);   // undefined=checking, null=logged out, {}=user

@@ -5,10 +5,10 @@ import { api, post } from "../api.js";
 // New-video upload, and per-card actions. Language variants group under parent.
 
 const STATUS = {
-  exported: ["Exported", "#34d8c9"],
-  ready: ["Script ready", "#7fb2ff"],
-  recorded: ["Recorded", "#e8b45a"],
-  empty: ["Empty", "#8a93a6"],
+  exported: ["Exported", "var(--ok)"],
+  ready: ["Script ready", "var(--accent)"],
+  recorded: ["Recorded", "var(--warn)"],
+  empty: ["Empty", "var(--faint)"],
 };
 const fmtSize = (b) => (b > 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.max(1, Math.round(b / 1e6)) + " MB");
 const fmtDate = (t) => new Date(t * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });

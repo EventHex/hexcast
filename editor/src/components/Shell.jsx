@@ -6,6 +6,7 @@ import { SettingsPage } from "./SettingsPage.jsx";
 import { HelpPage } from "./HelpPage.jsx";
 import { Onboarding } from "./Onboarding.jsx";
 import { CommandPalette } from "./CommandPalette.jsx";
+import { ThemeToggle } from "./ThemeToggle.jsx";
 
 // Persistent product shell: one top bar (Library · Brands · Settings · Help +
 // workspace stats) around every non-editor view. The editor is a separate
@@ -89,6 +90,7 @@ export function Shell({ user, onLogout } = {}) {
           ))}
         </nav>
         <span className="grow" />
+        <ThemeToggle />
         <button className="cmdk-btn" onClick={() => setCmdk(true)} title="Quick actions (⌘K)">⌘K</button>
         {stats && (
           <span className="stats" title="Workspace">

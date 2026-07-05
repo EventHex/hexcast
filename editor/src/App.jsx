@@ -9,6 +9,7 @@ import { ElementsPanel } from "./components/ElementsPanel.jsx";
 import { PublishDrawer } from "./components/PublishDrawer.jsx";
 import { ExportDrawer } from "./components/ExportDrawer.jsx";
 import { Shell } from "./components/Shell.jsx";
+import { ThemeToggle } from "./components/ThemeToggle.jsx";
 import { Timeline } from "./components/Timeline.jsx";
 import { api, jput, post, pollJob } from "./api.js";
 
@@ -367,6 +368,7 @@ export default function App({ user, onLogout } = {}) {
           <span className="projname" title="Click to rename" onClick={() => setEditingName(true)}>{cfg.name || pid}</span>
         )}
         <span className="grow" />
+        <ThemeToggle />
         {(() => {
           const PL = { google: "Google", elevenlabs: "ElevenLabs", soniox: "Soniox", piper: "Piper", original: "Original" };
           let vn;
