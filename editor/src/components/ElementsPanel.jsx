@@ -8,13 +8,16 @@ const TYPES = [
   ["image", "🖼 Image"],
 ];
 
-export function ElementsPanel({ pid, script, setScript, drawMode, setDrawMode, playhead }) {
+export function ElementsPanel({ pid, script, setScript, drawMode, setDrawMode, playhead, setStatus }) {
   const fileRef = useRef(null);
   const els = script.elements || [];
 
   const upd = (i, patch) =>
     setScript({ ...script, elements: els.map((e, k) => (k === i ? { ...e, ...patch } : e)) });
-  const del = (i) => setScript({ ...script, elements: els.filter((_, k) => k !== i) });
+  const del = (i) => {
+    setScript({ ...script, elements: els.filter((_, k) => k !== i) });
+    setStatus?.("Element removed. Re-render to apply.");
+  };
 
   const pick = (t) => {
     if (t === "image") { fileRef.current.click(); return; }

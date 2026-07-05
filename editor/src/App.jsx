@@ -546,18 +546,19 @@ export default function App() {
             <ScriptPanel pid={pid} script={script} setScript={setScriptD} seekTo={seekBaked} busy={busy} setStatus={setStatus} />
           )}
           {tab === "zooms" && (
-            <ZoomPanel script={script} setScript={setScriptD} sel={selZ} setSel={setSelZ} playhead={playheadBaked} />
+            <ZoomPanel pid={pid} script={script} setScript={setScriptD} sel={selZ} setSel={setSelZ}
+                       playhead={playheadBaked} setStatus={setStatus} />
           )}
           {tab === "elements" && (
             <ElementsPanel pid={pid} script={script} setScript={setScriptD}
-                           drawMode={drawMode} setDrawMode={setDrawMode} playhead={playheadBaked} />
+                           drawMode={drawMode} setDrawMode={setDrawMode} playhead={playheadBaked} setStatus={setStatus} />
           )}
           {tab === "audio" && (
             <AudioPanel pid={pid} cfg={cfg} setCfg={setCfgD} script={script} setScript={setScriptD}
                         playheadBaked={playheadBaked} setStatus={setStatus}
                         onProviderChange={setTtsProvider} onVoicesLoaded={setVoiceList} />
           )}
-          {tab === "style" && <StylePanel pid={pid} cfg={cfg} setCfg={setCfgD} />}
+          {tab === "style" && <StylePanel pid={pid} cfg={cfg} setCfg={setCfgD} setStatus={setStatus} />}
         </aside>
       </main>
     </div>

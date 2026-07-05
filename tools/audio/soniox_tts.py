@@ -9,6 +9,7 @@ Voices: https://api.soniox.com/v1/voices  create/list/delete cloned voices.
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,12 @@ from tools.base_tool import BaseTool, ToolResult
 TTS_URL = "https://tts-rt.soniox.com/tts"
 API_BASE = "https://api.soniox.com/v1"
 MODEL = "tts-rt-v1"
+
+# Soniox rate-limits *concurrent* requests (free/standard tiers ≈ 1). The render
+# pipeline fans out TTS across 8 threads, so without a gate every segment races
+# and most 429. Serialize Soniox calls (override with SONIOX_CONCURRENCY) so the
+# other providers keep their parallelism and Soniox just queues.
+_SEM = threading.Semaphore(max(1, int(os.environ.get("SONIOX_CONCURRENCY", "1"))))
 
 # tts-rt-v1 built-in voices, grouped for the picker. Region tags help the
 # founder pick a voice that matches their audience (Indian voices first for
@@ -96,19 +103,33 @@ class SonioxTTS(BaseTool):
         language = inputs.get("language") or "en"
         speed = float(inputs.get("speed") or 1.0)
 
+        payload = {"model": MODEL, "language": language, "voice": voice,
+                   "audio_format": "mp3", "text": text, "speed": speed}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
         start = time.time()
-        try:
-            r = requests.post(
-                TTS_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": MODEL, "language": language, "voice": voice,
-                      "audio_format": "mp3", "text": text, "speed": speed},
-                timeout=120,
-            )
-            r.raise_for_status()
-        except Exception as exc:
-            body = getattr(getattr(exc, "response", None), "text", "")
-            return ToolResult(success=False, error=f"Soniox TTS failed: {exc} {body[:200]}".strip())
+        # One in-flight Soniox request at a time; retry 429/5xx with backoff that
+        # honours Retry-After when the API sends it.
+        r = None
+        last = "no response"
+        for attempt in range(4):
+            with _SEM:
+                try:
+                    r = requests.post(TTS_URL, headers=headers, json=payload, timeout=120)
+                except Exception as exc:
+                    last = str(exc); r = None
+            if r is not None and r.status_code == 200:
+                break
+            if r is not None:
+                last = f"{r.status_code} {r.text[:160]}"
+                if r.status_code not in (429, 500, 502, 503, 504):
+                    return ToolResult(success=False, error=f"Soniox TTS failed: {last}")
+                wait = float(r.headers.get("Retry-After") or 0) or (0.8 * (attempt + 1))
+            else:
+                wait = 0.8 * (attempt + 1)
+            time.sleep(wait)
+        if r is None or r.status_code != 200:
+            return ToolResult(success=False, error=f"Soniox TTS failed: {last}")
 
         out = Path(inputs.get("output_path", "tts_output.mp3"))
         out.parent.mkdir(parents=True, exist_ok=True)

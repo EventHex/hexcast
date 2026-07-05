@@ -949,6 +949,50 @@ def put_config(pid: str, body: dict = Body(...)):
     return cfgmod.save(proj_dir(pid), body)
 
 
+@app.post("/api/projects/{pid}/zooms/auto")
+def regenerate_zooms(pid: str):
+    """Re-run AI zoom targeting on the current script and return fresh zoom
+    blocks. Does NOT re-render the video — the editor drops the zooms onto the
+    timeline live; the user renders when happy. Needs a vision key (Gemini /
+    Cerebras); without one it reports 0 so the UI can prompt for a key."""
+    env = settingsmod.provider_env(PROJECTS)
+    os.environ.update(env)
+    has_vision = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("CEREBRAS_API_KEY"))
+    d = proj_dir(pid)
+    sp = os.path.join(d, "script.json")
+    if not os.path.exists(sp):
+        raise HTTPException(400, "no script yet — process the recording first")
+    data = json.load(open(sp, encoding="utf-8"))
+    segs_all = data.get("segments") or []
+    idx = [i for i, s in enumerate(segs_all)
+           if s.get("type") in (None, "clip") and s.get("rstart") is not None and s.get("en")]
+    if not idx:
+        raise HTTPException(400, "no narration segments to zoom")
+    raw = next((os.path.join(d, f"raw.{e}") for e in ("webm", "mp4", "mov", "mkv")
+                if os.path.exists(os.path.join(d, f"raw.{e}"))), None)
+    if not raw:
+        raise HTTPException(400, "raw recording not found for this project")
+    from zoom_decide import decide
+    sub = [segs_all[i] for i in idx]
+    en = [segs_all[i].get("en", "") for i in idx]
+    try:
+        decisions = decide(raw, sub, en, d)
+    except Exception as e:
+        raise HTTPException(400, f"zoom AI failed: {e}")
+    zooms = []
+    for k, i in enumerate(idx):
+        dd = decisions[k] if k < len(decisions) else {}
+        s = segs_all[i]
+        if dd.get("zoom"):
+            zooms.append({"start": s["rstart"], "end": round(s["rstart"] + (s.get("rdur") or 0), 3),
+                          "cx": dd.get("cx") or 0.5, "cy": dd.get("cy") or 0.5,
+                          "scale": dd.get("scale") or 1.4, "speed": dd.get("speed") or 3})
+    data["zooms"] = zooms
+    data["zoomsEdited"] = False
+    json.dump(data, open(sp, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    return {"zooms": zooms, "count": len(zooms), "segments": len(idx), "vision": has_vision}
+
+
 def _caption_cues(d):
     """Timed narration cues from script.json (rstart + duration), for SRT/VTT."""
     sp = os.path.join(d, "script.json")

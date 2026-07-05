@@ -29,7 +29,7 @@ const SEL = (label, value, onChange, opts) => (
   </label>
 );
 
-export function StylePanel({ pid, cfg, setCfg }) {
+export function StylePanel({ pid, cfg, setCfg, setStatus }) {
   const logoRef = useRef(null);
   const bgRef = useRef(null);
   const [brandList, setBrandList] = useState([]);
@@ -46,7 +46,8 @@ export function StylePanel({ pid, cfg, setCfg }) {
     try {
       const fresh = await api(`/api/projects/${pid}/apply-brand/${bid}`, { method: "POST" });
       setCfg(fresh);   // brand merge happens server-side; take its result verbatim
-    } catch {}
+      setStatus?.("Brand applied — colors, logo, cards, voice & music. Re-render to apply.");
+    } catch { setStatus?.("Couldn't apply that brand."); }
   };
   const saveAsBrand = async () => {
     const name = window.prompt("Save current style as a brand — name:");
@@ -137,7 +138,8 @@ export function StylePanel({ pid, cfg, setCfg }) {
       <p className="hint">A brand applies colors, logo, cards, frame, voice and music in one click — set once, reuse on every video.</p>
       <div className="row gap wrap">
         {PRESETS.map(([name, patch]) => (
-          <button key={name} className="btn sm ghost" title="Apply this preset look" onClick={() => u(patch)}>
+          <button key={name} className="btn sm ghost" title="Apply this preset look"
+                  onClick={() => { u(patch); setStatus?.(`Applied “${name}” look.`); }}>
             {name}
           </button>
         ))}
@@ -263,7 +265,8 @@ export function StylePanel({ pid, cfg, setCfg }) {
       <label className="chk"><input type="checkbox" checked={cfg.zoom !== false}
              onChange={(e) => u({ zoom: e.target.checked })} /> Auto-zoom on generate</label>
       <label className="chk"><input type="checkbox" checked={cfg.captions !== false}
-             onChange={(e) => u({ captions: e.target.checked })} /> Burn captions</label>
+             onChange={(e) => { u({ captions: e.target.checked });
+               setStatus?.(e.target.checked ? "Captions on. Re-render to apply." : "Captions off. Re-render to apply."); }} /> Burn captions</label>
       <div className="row gap">
         {["16x9", "9x16", "1x1"].map((a) => (
           <label className="chk" key={a}>
