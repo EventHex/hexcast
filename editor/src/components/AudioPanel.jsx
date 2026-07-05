@@ -53,8 +53,12 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
   const [tts, setTts] = useState("auto");        // provider selection (settings-level)
   const [keysSet, setKeysSet] = useState({});    // {google:{set}, elevenlabs:{set}, ...}
   const [elVoices, setElVoices] = useState([]);  // live ElevenLabs voice list
+  const [snVoices, setSnVoices] = useState([]);  // Soniox built-in + cloned voices
+  const [cloneName, setCloneName] = useState("");
+  const [cloneBusy, setCloneBusy] = useState("");
   const audioRef = useRef(null);
   const fileRef = useRef(null);
+  const cloneRef = useRef(null);
   useEffect(() => {
     api("/api/music").then((r) => setTracks(r.tracks || [])).catch(() => {});
     api("/api/sfx").then((r) => setSfxLib(r.sfx || [])).catch(() => {});
@@ -66,6 +70,38 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
     if (effTts === "elevenlabs" && keysSet.elevenlabs?.set)
       api("/api/voices?provider=elevenlabs").then((r) => setElVoices(r.voices || [])).catch(() => setElVoices([]));
   }, [effTts, keysSet]);
+  const loadSoniox = () =>
+    api("/api/voices?provider=soniox").then((r) => setSnVoices(r.voices || [])).catch(() => setSnVoices([]));
+  useEffect(() => {
+    if (effTts === "soniox" && keysSet.soniox?.set) loadSoniox();
+  }, [effTts, keysSet]);
+  const snIds = snVoices.map((v) => v.id);
+  const snGroups = () => {
+    const m = {};
+    snVoices.forEach((v) => { (m[v.group] = m[v.group] || []).push(v); });
+    return Object.entries(m);
+  };
+  // clone: upload a short clip -> new voice id, then auto-select it
+  const doClone = async (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    const nm = cloneName.trim() || "My voice";
+    setCloneBusy("Cloning your voice… (~15s)");
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const r = await fetch(`/api/voices/clone?name=${encodeURIComponent(nm)}`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      const v = await r.json();
+      setCloneName(""); setCloneBusy("");
+      await loadSoniox();
+      u({ voice: v.id });
+    } catch { setCloneBusy("Clone failed — check the clip and your Soniox key."); }
+  };
+  const delClone = async (id) => {
+    try { await api(`/api/voices/clone/${id}`, { method: "DELETE" }); } catch {}
+    if (cfg.voice === id) u({ voice: "Priya" });
+    await loadSoniox();
+  };
   const setProvider = async (v) => {
     setTts(v);
     try { await jput("/api/settings", { tts: { provider: v } }); } catch {}
@@ -152,6 +188,7 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
           <option value="auto">Auto ({keysSet.google?.set ? "Google" : "original voice"})</option>
           <option value="google">Google Chirp3-HD</option>
           <option value="elevenlabs">ElevenLabs</option>
+          <option value="soniox">Soniox — clone your own voice</option>
           <option value="piper">Piper — local, free</option>
           <option value="original">My original recorded voice</option>
         </select>
@@ -198,6 +235,43 @@ export function AudioPanel({ pid, cfg, setCfg, script, setScript, playheadBaked,
           </label>
         ) : (
           <p className="hint">Add your ElevenLabs key in ⚙ Settings to list your voices.</p>
+        )
+      )}
+      {effTts === "soniox" && (
+        keysSet.soniox?.set ? (
+          <>
+            <label className="lab col">Narration voice
+              {snVoices.length ? (
+                <select value={snIds.includes(cfg.voice) ? cfg.voice : "Priya"}
+                        onChange={(e) => u({ voice: e.target.value })}>
+                  {snGroups().map(([g, vs]) => (
+                    <optgroup key={g} label={g}>
+                      {vs.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              ) : <span className="hint">Loading voices…</span>}
+            </label>
+            <span className="hint">Same voice speaks every language — pick one, set the language above.</span>
+            <div className="seg">
+              <div className="seg-top"><span className="tag">Clone your own voice</span></div>
+              <label className="lab col">Voice name
+                <input value={cloneName} placeholder="My voice"
+                       onChange={(e) => setCloneName(e.target.value)} /></label>
+              <button className="mini wideh" onClick={() => cloneRef.current.click()}>＋ Upload a 10–20s clip</button>
+              <input ref={cloneRef} type="file" accept="audio/*" hidden onChange={doClone} />
+              {cloneBusy && <p className="hint">{cloneBusy}</p>}
+              <p className="hint">Clean recording, one speaker, up to 20s (≤10 MB). It appears under “My cloned voices”.</p>
+              {snVoices.filter((v) => v.cloned).map((v) => (
+                <div className="row gap" key={v.id}>
+                  <span className="tag">{v.name}</span><span className="grow" />
+                  <button className="mini" title="Delete this cloned voice" onClick={() => delClone(v.id)}>×</button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="hint">Add your Soniox key in ⚙ Settings to pick voices and clone your own.</p>
         )
       )}
       {effTts === "piper" && (

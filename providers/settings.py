@@ -17,6 +17,7 @@ KEY_ENV = {
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
     "elevenlabs": "ELEVENLABS_API_KEY",
+    "soniox": "SONIOX_API_KEY",
     "google": "GOOGLE_API_KEY",
 }
 
@@ -29,7 +30,7 @@ DEFAULTS = {
             "openai_base_url": "https://api.openai.com/v1",
             "openai_model": "gpt-4o-mini"},
     "vision": {"provider": "auto"},                 # auto | cerebras | gemini | none
-    "tts": {"provider": "auto"},                    # auto | google | elevenlabs | piper | original
+    "tts": {"provider": "auto"},                    # auto | google | elevenlabs | soniox | piper | original
     "retention": {"days": 0},                       # >0: auto-prune heavy intermediates older than N days
     # workspace profile — new projects & brands prefill from these
     "workspace": {"company": "", "website": "",

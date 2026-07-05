@@ -488,7 +488,7 @@ def main():
         last = "no output"
         for attempt in range(3):
             try:
-                tts_synth(sg["en"], VOICE, mp3, provider=TTS_PROVIDER)
+                tts_synth(sg["en"], VOICE, mp3, provider=TTS_PROVIDER, language=LANG)
                 if os.path.exists(mp3) and os.path.getsize(mp3) > 0:
                     return None
             except Exception as e:

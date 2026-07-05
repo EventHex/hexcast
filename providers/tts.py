@@ -10,6 +10,7 @@ import os, subprocess
 from tools.audio.google_tts import GoogleTTS
 from tools.audio.elevenlabs_tts import ElevenLabsTTS
 from tools.audio.piper_tts import PiperTTS
+from tools.audio import soniox_tts
 
 _GOOGLE_HINTS = ("Chirp", "Journey", "Neural2", "Wavenet", "Standard", "Studio")
 
@@ -30,8 +31,11 @@ def _looks_google(voice: str) -> bool:
     return any(h in (voice or "") for h in _GOOGLE_HINTS)
 
 
-def synth(text: str, voice: str, output_path: str, provider: str | None = None) -> None:
-    """Generate speech to output_path (mp3). Raises RuntimeError on failure."""
+def synth(text: str, voice: str, output_path: str, provider: str | None = None,
+          language: str | None = None) -> None:
+    """Generate speech to output_path (mp3). `language` is the config language
+    name (e.g. 'Malayalam'); only Soniox needs it (built-in voices are language
+    -agnostic). Raises RuntimeError on failure."""
     p = resolve_provider(provider)
     if p == "google":
         lang = "-".join(voice.split("-")[:2]) if _looks_google(voice) else "en-US"
@@ -43,6 +47,12 @@ def synth(text: str, voice: str, output_path: str, provider: str | None = None) 
         if voice and not _looks_google(voice):
             inputs["voice_id"] = voice
         r = ElevenLabsTTS().execute(inputs)
+    elif p == "soniox":
+        # a leftover Google voice code means "use the default built-in voice"
+        v = voice if (voice and not _looks_google(voice)) else soniox_tts.DEFAULT_VOICE
+        r = soniox_tts.SonioxTTS().execute({"text": text, "voice": v,
+                                            "language": soniox_tts.iso(language),
+                                            "output_path": output_path})
     elif p == "piper":
         wav = output_path.rsplit(".", 1)[0] + ".wav"
         model = voice if voice and not _looks_google(voice) else "en_US-lessac-medium"
@@ -63,9 +73,22 @@ def synth(text: str, voice: str, output_path: str, provider: str | None = None) 
 
 
 def list_voices(provider: str) -> list[dict]:
-    """[{id, name, preview_url}] for pickable providers. ElevenLabs is live
-    (per-account voices); Google voices stay hardcoded in the editor with
-    bundled preview MP3s."""
+    """[{id, name, preview_url, group, cloned}] for pickable providers.
+    ElevenLabs and Soniox are live (per-account voices); Google voices stay
+    hardcoded in the editor with bundled preview MP3s. Soniox has no preview
+    endpoint, so preview_url is null."""
+    if provider == "soniox":
+        out = []
+        for group, names in soniox_tts.BUILTIN_VOICES:
+            for n in names:
+                out.append({"id": n, "name": n, "preview_url": None, "group": group, "cloned": False})
+        try:
+            for v in soniox_tts.list_cloned_voices():
+                out.append({"id": v["id"], "name": v["name"], "preview_url": None,
+                            "group": "My cloned voices", "cloned": True})
+        except Exception:
+            pass  # no key / API down: still return the built-ins
+        return out
     if provider == "elevenlabs":
         import requests
         key = os.environ.get("ELEVENLABS_API_KEY")

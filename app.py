@@ -832,6 +832,33 @@ def voices(provider: str = "elevenlabs"):
         raise HTTPException(400, str(e))
 
 
+@app.post("/api/voices/clone")
+async def clone_voice(name: str, file: UploadFile = File(...)):
+    """Create a Soniox cloned voice from a short reference clip (few sec–20s,
+    ≤10 MB). Returns {id, name}; the id is used as the TTS voice."""
+    os.environ.update(settingsmod.provider_env(PROJECTS))
+    from tools.audio import soniox_tts
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(400, "sample too large (max 10 MB)")
+    try:
+        return soniox_tts.create_cloned_voice(name.strip() or "My voice", data,
+                                              file.filename or "sample.mp3")
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/voices/clone/{voice_id}")
+def delete_clone(voice_id: str):
+    os.environ.update(settingsmod.provider_env(PROJECTS))
+    from tools.audio import soniox_tts
+    try:
+        soniox_tts.delete_cloned_voice(voice_id)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+
 @app.get("/api/settings")
 def get_settings():
     return settingsmod.masked_view(PROJECTS)

@@ -16,13 +16,15 @@ const PROVIDERS = [
     ["none", "Off — recorded clicks only"]] },
   { k: "tts", label: "Voice (TTS)", note: "The voice that reads your script.", opts: [
     ["auto", "Auto — Google if a key is set, else your recorded voice (recommended)"],
-    ["google", "Google Chirp3-HD"], ["elevenlabs", "ElevenLabs"], ["piper", "Piper — local, free"],
+    ["google", "Google Chirp3-HD"], ["elevenlabs", "ElevenLabs"],
+    ["soniox", "Soniox — clone your own voice"], ["piper", "Piper — local, free"],
     ["original", "My original recorded voice"]] },
 ];
 const KEYS = [
   ["groq", "Groq", "console.groq.com/keys"], ["cerebras", "Cerebras", "cloud.cerebras.ai"],
   ["gemini", "Google Gemini", "aistudio.google.com/apikey"], ["google", "Google Cloud (TTS)", "console.cloud.google.com"],
-  ["elevenlabs", "ElevenLabs", "elevenlabs.io/app/settings/api-keys"], ["openai", "OpenAI-compatible", "platform.openai.com/api-keys"],
+  ["elevenlabs", "ElevenLabs", "elevenlabs.io/app/settings/api-keys"], ["soniox", "Soniox (TTS + cloning)", "console.soniox.com"],
+  ["openai", "OpenAI-compatible", "platform.openai.com/api-keys"],
 ];
 const LANGS = ["English", "Hindi", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Gujarati",
   "Marathi", "Arabic", "Spanish", "French", "German", "Portuguese", "Japanese", "Korean", "Indonesian"];
