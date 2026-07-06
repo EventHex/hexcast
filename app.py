@@ -1048,12 +1048,10 @@ def record_start(body: dict = Body(...)):
     import recording
     if recording.is_recording():
         raise HTTPException(409, "already recording")
-    try:
-        screen = int(body.get("screen_index"))
-    except (TypeError, ValueError):
-        raise HTTPException(400, "screen_index required")
-    mic = body.get("mic_index")
-    mic = int(mic) if mic not in (None, "", "none") else None
+    target = (body.get("target") or "").strip()
+    if not target:
+        raise HTTPException(400, "target required")
+    mic = body.get("mic") or None
     fps = int(body.get("fps") or 30)
     pid = "rec-" + uuid.uuid4().hex[:8]
     d = os.path.join(_data(), pid)
@@ -1061,7 +1059,7 @@ def record_start(body: dict = Body(...)):
     cfgmod.save(d, {"name": "Screen recording"})
     raw_path = os.path.join(d, "raw.mp4")
     try:
-        recording.start(raw_path, screen, mic, fps)
+        recording.start(raw_path, target, mic, fps)
     except Exception as e:
         import shutil
         shutil.rmtree(d, ignore_errors=True)

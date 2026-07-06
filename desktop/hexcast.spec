@@ -11,12 +11,18 @@ from PyInstaller.utils.hooks import collect_submodules
 
 ROOT = os.path.abspath(os.path.join(os.getcwd(), ".."))   # repo root (run from desktop/)
 
-# --- bundle a copy of ffmpeg into bin/ ---
+# --- bundle ffmpeg + the ScreenCaptureKit recorder into bin/ ---
 _ff = shutil.which("ffmpeg")
 _ffbins = [(_ff, "bin")] if _ff else []
 if not _ff:
     print("WARNING: ffmpeg not found on PATH — the app can't render without it. "
           "Install ffmpeg, or drop a static binary at desktop/bin/ffmpeg.")
+_rec = os.path.join(SPECPATH, "bin", "hexcast-recorder")
+if os.path.exists(_rec):
+    _ffbins.append((_rec, "bin"))
+else:
+    print("WARNING: desktop/bin/hexcast-recorder missing — window recording will "
+          "fall back to whole-screen ffmpeg. Build it: build-dmg.sh compiles it.")
 
 # --- source + data the server reads at runtime ---
 datas = [

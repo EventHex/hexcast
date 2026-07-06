@@ -18,6 +18,18 @@ echo "==> Editor build"
 
 command -v ffmpeg >/dev/null || echo "!! ffmpeg not on PATH — the app won't render. brew install ffmpeg"
 
+echo "==> ScreenCaptureKit recorder (Swift)"
+if xcrun --find swiftc >/dev/null 2>&1; then
+  xcrun swiftc -O -target arm64-apple-macos14.0 \
+    -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia \
+    -framework CoreGraphics -framework AppKit \
+    recorder/HexCastRecorder.swift -o bin/hexcast-recorder \
+    && echo "   built bin/hexcast-recorder" \
+    || echo "!! swiftc failed — window recording falls back to whole-screen ffmpeg"
+else
+  echo "!! swiftc not found — window recording falls back to whole-screen ffmpeg"
+fi
+
 echo "==> PyInstaller"
 rm -rf build dist
 pyinstaller --noconfirm hexcast.spec

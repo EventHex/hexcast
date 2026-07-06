@@ -27,9 +27,9 @@ export function Library({ onChange }) {
 
   // native screen recording
   const [recModal, setRecModal] = useState(false);   // device-picker open
-  const [devices, setDevices] = useState(null);       // {screens,mics} | {error}
-  const [screenIdx, setScreenIdx] = useState(null);
-  const [micIdx, setMicIdx] = useState(null);
+  const [devices, setDevices] = useState(null);       // {screens,windows,mics} | {error}
+  const [target, setTarget] = useState("");           // token of the screen/window to capture
+  const [mic, setMic] = useState("");                 // mic token, "" = no mic
   const [rec, setRec] = useState(null);               // {pid} while capturing
   const [elapsed, setElapsed] = useState(0);
 
@@ -55,14 +55,14 @@ export function Library({ onChange }) {
     try {
       const d = await api("/api/record/devices");
       setDevices(d);
-      setScreenIdx(d.screens?.[0]?.index ?? null);
-      setMicIdx(d.mics?.[0]?.index ?? null);
+      setTarget(d.screens?.[0]?.index ?? d.windows?.[0]?.index ?? "");
+      setMic(d.mics?.[0]?.index ?? "");
     } catch (e) { setDevices({ error: e.message || "Capture devices unavailable" }); }
   };
   const startRec = async () => {
-    if (screenIdx == null) return;
+    if (!target) return;
     try {
-      const { id } = await postJson("/api/record/start", { screen_index: screenIdx, mic_index: micIdx });
+      const { id } = await postJson("/api/record/start", { target, mic: mic || null });
       setRecModal(false); setElapsed(0); setRec({ pid: id });
     } catch (e) { alert(e.message || "Could not start recording"); }
   };
@@ -189,30 +189,42 @@ export function Library({ onChange }) {
         <div className="modal-wrap" onClick={(e) => e.target === e.currentTarget && setRecModal(false)}>
           <div className="modal">
             <h3>Record your screen</h3>
-            {devices == null && <p className="modal-step">Finding capture devices…</p>}
+            {devices == null && <p className="modal-step">Finding screens &amp; windows…</p>}
             {devices?.error && <p className="modal-step" style={{ color: "var(--bad)" }}>{devices.error}</p>}
             {devices && !devices.error && (
               <>
                 <label className="field">
-                  <span className="hint">Screen</span>
-                  <select value={screenIdx ?? ""} onChange={(e) => setScreenIdx(Number(e.target.value))}>
-                    {devices.screens.map((s) => <option key={s.index} value={s.index}>{s.name}</option>)}
+                  <span className="hint">What to record</span>
+                  <select value={target} onChange={(e) => setTarget(e.target.value)}>
+                    {devices.screens?.length > 0 && (
+                      <optgroup label="Whole screen">
+                        {devices.screens.map((s) => <option key={s.index} value={s.index}>{s.name}</option>)}
+                      </optgroup>
+                    )}
+                    {devices.windows?.length > 0 && (
+                      <optgroup label="A window">
+                        {devices.windows.map((w) => <option key={w.index} value={w.index}>{w.name}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                 </label>
                 <label className="field">
                   <span className="hint">Microphone</span>
-                  <select value={micIdx ?? "none"} onChange={(e) => setMicIdx(e.target.value === "none" ? null : Number(e.target.value))}>
-                    <option value="none">No microphone (silent)</option>
+                  <select value={mic} onChange={(e) => setMic(e.target.value)}>
+                    <option value="">No microphone (silent)</option>
                     {devices.mics.map((m) => <option key={m.index} value={m.index}>{m.name}</option>)}
                   </select>
                 </label>
+                {devices.windows?.length === 0 && (
+                  <p className="hint">Only whole screens are available — install/enable the recorder to capture a single window.</p>
+                )}
                 <p className="hint">First recording asks for macOS Screen Recording permission — approve it, then record again.</p>
               </>
             )}
             <div className="row gap" style={{ marginTop: 6 }}>
               <button className="btn ghost" onClick={() => setRecModal(false)}>Cancel</button>
               <span className="grow" />
-              <button className="btn" disabled={!devices || devices.error || screenIdx == null} onClick={startRec}>● Start recording</button>
+              <button className="btn" disabled={!devices || devices.error || !target} onClick={startRec}>● Start recording</button>
             </div>
           </div>
         </div>
