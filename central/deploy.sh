@@ -46,7 +46,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --memory 512Mi \
-  --set-env-vars "HEXCAST_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=0.1.0" \
+  --set-env-vars "HEXCAST_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=0.1.0,MAC_URL=${MAC_URL:-https://storage.googleapis.com/hexcast-dl-657487551020/HexCast.dmg}" \
   --set-secrets "SECRET_KEY=hexcast-secret:latest" \
   --project "$PROJECT"
 

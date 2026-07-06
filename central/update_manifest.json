@@ -1,5 +1,7 @@
 {
   "version": "0.1.0",
   "url": "https://github.com/eventhex/hexcast/releases/latest/download/HexCast.dmg",
+  "mac_url": "https://github.com/eventhex/hexcast/releases/latest/download/HexCast.dmg",
+  "win_url": null,
   "notes": "First public build."
 }

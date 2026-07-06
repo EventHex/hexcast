@@ -37,13 +37,44 @@ pyinstaller --noconfirm hexcast.spec
 APP="dist/HexCast.app"
 [ -d "$APP" ] || { echo "BUILD FAILED: $APP not produced"; exit 1; }
 
-echo "==> DMG (drag to Applications)"
-STAGE="$(mktemp -d)"
-cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-rm -f dist/HexCast.dmg
-hdiutil create -volname "HexCast" -srcfolder "$STAGE" -ov -format UDZO dist/HexCast.dmg >/dev/null
-rm -rf "$STAGE"
+echo "==> DMG (styled install window, drag to Applications)"
+VOL="HexCast"
+RW="dist/hexcast-rw.dmg"
+MNT="/Volumes/$VOL"
+rm -f "$RW" dist/HexCast.dmg
+hdiutil detach "$MNT" >/dev/null 2>&1 || true
+# writable image seeded with the app, then dressed up in Finder
+hdiutil create -volname "$VOL" -srcfolder "$APP" -fs HFS+ -format UDRW -ov "$RW" >/dev/null
+hdiutil attach "$RW" -noautoopen >/dev/null
+mkdir -p "$MNT/.background"
+cp assets/dmg-background.png "$MNT/.background/bg.png"
+ln -s /Applications "$MNT/Applications"
+# Finder view: background + icon positions matching the arrow (needs Automation
+# permission; non-fatal so the build still yields a working DMG if it's denied).
+osascript <<EOF 2>/dev/null || echo "   (Finder styling skipped — grant Automation permission for a prettier window)"
+tell application "Finder"
+  tell disk "$VOL"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {200, 120, 800, 520}
+    set vopts to the icon view options of container window
+    set arrangement of vopts to not arranged
+    set icon size of vopts to 112
+    set background picture of vopts to file ".background:bg.png"
+    set position of item "HexCast.app" of container window to {150, 236}
+    set position of item "Applications" of container window to {450, 236}
+    update without registering applications
+    delay 1
+    close
+  end tell
+end tell
+EOF
+sync
+hdiutil detach "$MNT" >/dev/null
+hdiutil convert "$RW" -format UDZO -o dist/HexCast.dmg >/dev/null
+rm -f "$RW"
 
 echo ""
 echo "Done  ->  desktop/dist/HexCast.dmg"

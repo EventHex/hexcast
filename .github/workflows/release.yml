@@ -1,0 +1,77 @@
+# Build HexCast for macOS + Windows and publish a GitHub Release.
+# Trigger: push a tag like v0.2.0  ->  git tag v0.2.0 && git push origin v0.2.0
+#
+# The macOS job reuses desktop/build-dmg.sh (verified locally). The Windows job
+# is a starter — PyInstaller on Windows uses a .ico icon and no .app bundle;
+# expect a round or two of "add missing hiddenimport" on the runner, exactly
+# like the first mac build. WebView2 runtime ships on Win10/11 for pywebview.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the Release
+
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+      - name: Build editor
+        run: cd editor && npm ci && npm run build
+      - name: Build DMG
+        run: cd desktop && PYTHON=python3.12 ./build-dmg.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/HexCast.dmg
+          fail_on_unmatched_files: true
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Build editor
+        run: cd editor && npm ci && npm run build
+      - name: Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pywebview
+          pip install -r requirements.txt
+      - name: Fetch ffmpeg
+        shell: bash
+        run: |
+          mkdir -p desktop/bin
+          curl -L -o ff.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          unzip -q ff.zip -d ff && cp ff/*/bin/ffmpeg.exe desktop/bin/ffmpeg.exe
+      - name: Build (PyInstaller, onedir)
+        shell: bash
+        working-directory: desktop
+        run: |
+          pyinstaller --noconfirm --name HexCast --windowed \
+            --icon ../HexCast/"icon only logo.png" \
+            --add-data "../app.py;." --add-data "../auth.py;." \
+            --add-data "../brands.py;." --add-data "../recording.py;." \
+            --add-data "../providers;providers" --add-data "../tools;tools" \
+            --add-data "../pipeline;pipeline" --add-data "../editor/dist;editor/dist" \
+            --add-data "../assets;assets" --add-binary "bin/ffmpeg.exe;bin" \
+            --hidden-import app --hidden-import auth --hidden-import brands \
+            --hidden-import recording --hidden-import config --hidden-import webview \
+            --hidden-import webview.platforms.edgechromium \
+            launcher.py
+          cd dist && 7z a HexCast-Windows.zip HexCast
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/HexCast-Windows.zip
+          fail_on_unmatched_files: true

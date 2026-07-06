@@ -13,9 +13,11 @@ import os
 
 from fastapi import FastAPI, Body, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse, HTMLResponse
 
 import store
+
+_HERE = os.path.dirname(__file__)
 
 app = FastAPI(title="HexCast Central")
 store.init()
@@ -37,6 +39,23 @@ def _bearer(authorization: str | None) -> dict:
     return u
 
 
+@app.get("/", response_class=HTMLResponse)
+def landing():
+    """Public download page (Mac + Windows)."""
+    p = os.path.join(_HERE, "landing.html")
+    if os.path.exists(p):
+        return HTMLResponse(open(p, encoding="utf-8").read())
+    return HTMLResponse("<h1>HexCast</h1>")
+
+
+@app.get("/logo.png")
+def logo():
+    p = os.path.join(_HERE, "logo.png")
+    if os.path.exists(p):
+        return FileResponse(p, media_type="image/png")
+    raise HTTPException(404, "no logo")
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "hexcast-central",
@@ -53,10 +72,12 @@ def latest_update():
     Falls back to central/update_manifest.json for local runs."""
     v = os.environ.get("UPDATE_VERSION")
     if v:
-        return {"version": v, "url": os.environ.get("UPDATE_URL"),
+        mac = os.environ.get("MAC_URL") or os.environ.get("UPDATE_URL")
+        return {"version": v, "url": mac, "mac_url": mac,
+                "win_url": os.environ.get("WIN_URL"),
                 "notes": os.environ.get("UPDATE_NOTES")}
     import json
-    p = os.path.join(os.path.dirname(__file__), "update_manifest.json")
+    p = os.path.join(_HERE, "update_manifest.json")
     if os.path.exists(p):
         with open(p) as f:
             return json.load(f)
