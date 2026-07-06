@@ -14,8 +14,8 @@ export function HelpPage() {
   useEffect(() => { api("/api/health").then(setInfo).catch(() => {}); }, []);
   return (
     <div className="page">
-      <div className="page-head"><h1>Help</h1></div>
-      <div className="page-body" style={{ maxWidth: 640 }}>
+      <div className="page-head narrow"><h1>Help</h1></div>
+      <div className="page-body narrow">
         <section className="card">
           <span className="eyebrow">Keyboard shortcuts</span>
           <table className="kv">
@@ -27,11 +27,12 @@ export function HelpPage() {
           </table>
         </section>
         <section className="card">
-          <span className="eyebrow">Recorder extension</span>
+          <span className="eyebrow">Screen recording</span>
           <p className="hint">
-            {info.extension_seen
-              ? "Recorder extension detected — recordings land in your Library automatically."
-              : "Install the HexCast recorder extension to capture a tab + your mic straight into the Library. Not detected yet."}
+            Record your screen and mic straight into the Library — no browser extension.
+            Hit <b>● Record</b> on the Library page, pick your screen and microphone, and the
+            capture drops into a new project ready to edit. First recording asks for macOS
+            Screen&nbsp;Recording permission.
           </p>
         </section>
         <section className="card">

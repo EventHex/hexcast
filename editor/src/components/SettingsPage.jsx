@@ -68,18 +68,18 @@ export function SettingsPage() {
 
   return (
     <div className="page">
-      <div className="page-head">
+      <div className="page-head narrow">
         <h1>Settings</h1>
         <span className="grow" />
         {dirty && <button className="btn sm" onClick={save}>Save changes</button>}
         {saved && !dirty && <span className="hint">Saved ✓</span>}
       </div>
-      <div className="subtabs">
+      <div className="subtabs narrow">
         {[["providers", "Providers & Keys"], ["workspace", "Workspace"], ["about", "About"]].map(([v, l]) => (
           <button key={v} className={tab === v ? "on" : ""} onClick={() => setTab(v)}>{l}</button>
         ))}
       </div>
-      <div className="page-body" style={{ maxWidth: 620 }}>
+      <div className="page-body narrow">
         {tab === "providers" && <>
           <section className="card">
             <span className="eyebrow">Providers</span>

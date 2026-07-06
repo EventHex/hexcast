@@ -391,16 +391,16 @@ export default function App({ user, onLogout } = {}) {
             Rendering {Math.round(prog * 100)}%
           </button>
         )}
-        {job && !modal?.minimized && <button className="btn sm danger" onClick={cancel}>Cancel</button>}
+        {job && !modal?.minimized && <button className="btn danger" onClick={cancel}>Cancel</button>}
         <label className="chk" title="Re-render in the background a few seconds after you stop editing. Only the changed stage runs (e.g. a sound effect = fast pass, no re-voice).">
           <input type="checkbox" checked={autoRender} onChange={toggleAuto} /> Auto-render
         </label>
         <button className="btn" disabled={!!job}
                 title="Build the video from your current edits. Runs only the stages your edits changed — framing is instant, re-voicing only when the script or voice changed."
                 onClick={() => run("render", "Rendering video")}>▶ Render</button>
-        <button className="btn sm ghost" disabled={!!job} title="Download the finished video (any size) + thumbnail, GIF and audio"
+        <button className="btn ghost" disabled={!!job} title="Download the finished video (any size) + thumbnail, GIF and audio"
                 onClick={() => setShowExport(true)}>⬇ Export ▾</button>
-        <button className="btn sm ghost" title="Captions, transcript, step-by-step guide and other-language versions"
+        <button className="btn ghost" title="Captions, transcript, step-by-step guide and other-language versions"
                 onClick={() => setShowPublish(true)}>Publish ▾</button>
       </header>
 
