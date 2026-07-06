@@ -1,5 +1,5 @@
 /* ============================================================
-   Remaster — warm editorial design system
+   HexCast — warm editorial design system
    Warm oat paper · warm ink · one quiet slate-indigo accent.
    Light default; dark via prefers-color-scheme + [data-theme].
    Component classes are unchanged — they all read the tokens.
@@ -352,3 +352,17 @@ kbd { background: var(--panel2); border: 1px solid var(--line-strong); border-ra
 .updatebar { display: flex; align-items: center; gap: 12px; padding: 9px 18px;
   background: color-mix(in srgb, var(--accent) 12%, var(--panel)); color: var(--text);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); font-size: 13px; }
+
+/* --- HexCast brand logos --- */
+.brand { display: inline-flex; align-items: center; }
+.brand-logo { height: 24px; width: auto; display: block; }
+.brand-logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  .brand-logo-light { display: none; }
+  .brand-logo-dark { display: block; }
+}
+:root[data-theme="light"] .brand-logo-light { display: block; }
+:root[data-theme="light"] .brand-logo-dark { display: none; }
+:root[data-theme="dark"] .brand-logo-light { display: none; }
+:root[data-theme="dark"] .brand-logo-dark { display: block; }
+.authbrand-logo { display: block; height: 64px; width: auto; margin: 0 auto 2px; }

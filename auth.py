@@ -1,7 +1,7 @@
 """Accounts + sessions for the multi-user (SaaS) mode.
 
 Stdlib-only crypto (no bcrypt/passlib/jwt dep): pbkdf2 password hashing and an
-HMAC-signed session token. Users live in SQLite at <data_root>/remaster.db.
+HMAC-signed session token. Users live in SQLite at <data_root>/hexcast.db.
 Google sign-in is optional — it activates only when GOOGLE_OAUTH_CLIENT_ID /
 GOOGLE_OAUTH_CLIENT_SECRET are set.
 
@@ -32,7 +32,11 @@ def init(data_root: str) -> None:
     global _DB, _ROOT, _SECRET
     _ROOT = data_root
     os.makedirs(data_root, exist_ok=True)
-    _DB = os.path.join(data_root, "remaster.db")
+    _DB = os.path.join(data_root, "hexcast.db")
+    # carry over accounts from the pre-rebrand filename (Remaster -> HexCast)
+    _legacy = os.path.join(data_root, "remaster.db")
+    if os.path.exists(_legacy) and not os.path.exists(_DB):
+        os.rename(_legacy, _DB)
     con = _con()
     con.execute(
         """CREATE TABLE IF NOT EXISTS users(
@@ -53,7 +57,7 @@ def _con() -> sqlite3.Connection:
 def _load_secret(data_root: str) -> str:
     """Persistent HMAC secret for session tokens. Env override wins so a fleet
     of instances can share one; else generated once and stored chmod 600."""
-    env = os.environ.get("REMASTER_SECRET_KEY")
+    env = os.environ.get("HEXCAST_SECRET_KEY")
     if env:
         return env
     p = os.path.join(data_root, ".secret")

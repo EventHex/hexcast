@@ -78,7 +78,7 @@ def main(proj):
                          "(was your microphone on?). Re-record with your voice.")
 
     key = os.environ.get("GROQ_API_KEY")
-    if os.environ.get("REMASTER_STT_PROVIDER", "").lower() == "local":
+    if os.environ.get("HEXCAST_STT_PROVIDER", "").lower() == "local":
         key = None   # explicit local mode: skip the cloud attempt entirely
     out = lang = None
     dur = 0.0

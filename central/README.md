@@ -1,4 +1,4 @@
-# Remaster — central control plane
+# HexCast — central control plane
 
 A tiny accounts + usage API. It never touches video or provider keys: the
 desktop app processes everything locally with the user's own keys, and only
@@ -28,7 +28,7 @@ uvicorn main:app --port 8790
 ```
 
 ## Deploy to GCP (Cloud Run + Firestore) — the current setup
-Backend is Firestore (`REMASTER_BACKEND=firestore`): serverless, scales to
+Backend is Firestore (`HEXCAST_BACKEND=firestore`): serverless, scales to
 zero, no idle cost. The DB already exists (asia-south1, Native mode). Deploy:
 ```bash
 cd central && ./deploy.sh
@@ -37,19 +37,19 @@ cd central && ./deploy.sh
 stable session secret (`.central-secret`, gitignored), then builds + deploys
 `--allow-unauthenticated` (the service must be public — the desktop app calls it
 from users' machines with no GCP credentials). It prints the URL and hits
-`/health`. Point the desktop app at that URL via `REMASTER_AUTH_URL`.
+`/health`. Point the desktop app at that URL via `HEXCAST_AUTH_URL`.
 
 Bump the desktop version on a new release without redeploying code:
 ```bash
-gcloud run services update remaster-central --region asia-south1 \
-  --update-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/Remaster.dmg
+gcloud run services update hexcast-central --region asia-south1 \
+  --update-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/HexCast.dmg
 ```
 
-`SECRET_KEY` is delivered from **Secret Manager** (`remaster-secret`), not a
+`SECRET_KEY` is delivered from **Secret Manager** (`hexcast-secret`), not a
 plaintext env var — `deploy.sh` creates the secret, grants the runtime SA
 `secretmanager.secretAccessor`, and deploys with
-`--set-secrets SECRET_KEY=remaster-secret:latest`.
+`--set-secrets SECRET_KEY=hexcast-secret:latest`.
 
 ### Alternative: Cloud SQL Postgres
 Set `DATABASE_URL=postgresql://…` (and `--add-cloudsql-instances`) instead of
-`REMASTER_BACKEND=firestore`. `store.py` supports both.
+`HEXCAST_BACKEND=firestore`. `store.py` supports both.

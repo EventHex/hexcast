@@ -177,12 +177,12 @@ export default function App({ user, onLogout } = {}) {
   const [modal, setModal] = useState(null); // {phase, step, error, minimized}
   const [prog, setProg] = useState(0);
   const [downloadKey, setDownloadKey] = useState(0);   // cache-bust download links after a render
-  const [autoRender, setAutoRender] = useState(() => localStorage.getItem("remaster_autorender") === "1");
+  const [autoRender, setAutoRender] = useState(() => localStorage.getItem("hexcast_autorender") === "1");
   const [editingName, setEditingName] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [coach, setCoach] = useState(() => !localStorage.getItem("remaster_coached"));
-  const dismissCoach = () => { localStorage.setItem("remaster_coached", "1"); setCoach(false); };
+  const [coach, setCoach] = useState(() => !localStorage.getItem("hexcast_coached"));
+  const dismissCoach = () => { localStorage.setItem("hexcast_coached", "1"); setCoach(false); };
 
   const commitName = async (name) => {
     setEditingName(false);
@@ -255,7 +255,7 @@ export default function App({ user, onLogout } = {}) {
   const toggleAuto = () => {
     const v = !autoRender;
     setAutoRender(v);
-    localStorage.setItem("remaster_autorender", v ? "1" : "0");
+    localStorage.setItem("hexcast_autorender", v ? "1" : "0");
   };
   useEffect(() => {
     if (!autoRender || !dirty || job || !pid) return;

@@ -1,9 +1,9 @@
-# Remaster
+# HexCast
 
 **Turn a raw screen recording into a polished, revoiced, brand-framed product
 demo video — in your browser, on your machine.**
 
-You record yourself talking through your product once. Remaster transcribes it,
+You record yourself talking through your product once. HexCast transcribes it,
 cleans the narration with AI, re-voices it with a studio-quality TTS voice,
 zooms in on what you're talking about (driven by your actual clicks), frames it
 with your brand, and exports 16:9 / 9:16 / 1:1 — all locally, with your own API
@@ -15,7 +15,7 @@ keys.
 ## Quickstart
 
 ```bash
-git clone <repo> remaster && cd remaster
+git clone <repo> hexcast && cd hexcast
 python3 -m pip install -r requirements.txt
 python3 -m uvicorn app:app --port 8765
 # open http://127.0.0.1:8765
@@ -66,7 +66,7 @@ Keys, providers and storage retention live in the **⚙ Settings** tab.
   changes: `cd editor && npm install && npm run build` (built `dist/` is
   committed so the server works without Node).
 - `assets/` — music beds, SFX, voice previews, default example brand.
-- `projects/` (gitignored; move with `REMASTER_DATA_DIR`) — per-project data:
+- `projects/` (gitignored; move with `HEXCAST_DATA_DIR`) — per-project data:
   `config.json`, `script.json`, renders.
 
 ## Notes

@@ -18,12 +18,12 @@ command -v ffmpeg >/dev/null || { echo "!! ffmpeg not on PATH — install it (br
 
 echo "==> PyInstaller"
 rm -rf build dist
-pyinstaller remaster.spec
+pyinstaller hexcast.spec
 
 echo ""
-echo "Done. App: desktop/dist/Remaster.app"
-echo "Run:  open desktop/dist/Remaster.app     (or ./dist/Remaster/Remaster for logs)"
+echo "Done. App: desktop/dist/HexCast.app"
+echo "Run:  open desktop/dist/HexCast.app     (or ./dist/HexCast/HexCast for logs)"
 echo ""
 echo "This build is UNSIGNED — Gatekeeper will warn. For testing, right-click the"
-echo ".app > Open, or:  xattr -dr com.apple.quarantine desktop/dist/Remaster.app"
+echo ".app > Open, or:  xattr -dr com.apple.quarantine desktop/dist/HexCast.app"
 echo "Signing/notarization (later) needs an Apple Developer ID; see README.md."

@@ -1,4 +1,4 @@
-"""Desktop entry point for Remaster (model B: everything runs on the user's
+"""Desktop entry point for HexCast (model B: everything runs on the user's
 machine). Boots the local FastAPI server and opens the browser to the editor.
 
 Frozen-app subtlety: the render pipeline is spawned as Python subprocesses
@@ -39,11 +39,16 @@ def main() -> None:
     # bundled ffmpeg first on PATH (the pipeline shells out to `ffmpeg`)
     os.environ["PATH"] = os.path.join(root, "bin") + os.pathsep + os.environ.get("PATH", "")
     # the app bundle is read-only -> keep all user data in the home dir
-    os.environ.setdefault("REMASTER_DATA_DIR", os.path.expanduser("~/Remaster/projects"))
-    os.makedirs(os.environ["REMASTER_DATA_DIR"], exist_ok=True)
+    os.environ.setdefault("HEXCAST_DATA_DIR", os.path.expanduser("~/HexCast/projects"))
+    # carry over projects from the pre-rebrand location (~/Remaster -> ~/HexCast)
+    _legacy_dir = os.path.expanduser("~/Remaster/projects")
+    if os.path.isdir(_legacy_dir) and not os.path.exists(os.environ["HEXCAST_DATA_DIR"]):
+        os.makedirs(os.path.dirname(os.environ["HEXCAST_DATA_DIR"]), exist_ok=True)
+        os.rename(_legacy_dir, os.environ["HEXCAST_DATA_DIR"])
+    os.makedirs(os.environ["HEXCAST_DATA_DIR"], exist_ok=True)
     # central control plane for accounts + usage + auto-update (override to run
     # against a different backend, or set to "" for self-contained local accounts)
-    os.environ.setdefault("REMASTER_AUTH_URL", "https://remaster-central-qx4ytrgsua-el.a.run.app")
+    os.environ.setdefault("HEXCAST_AUTH_URL", "https://hexcast-central-657487551020.asia-south1.run.app")
 
     host, port = "127.0.0.1", int(os.environ.get("PORT", "8765"))
 
@@ -67,7 +72,7 @@ def main() -> None:
     # back to the default browser if the WebView backend is unavailable.
     try:
         import webview
-        webview.create_window("Remaster", url + "/editor/",
+        webview.create_window("HexCast", url + "/editor/",
                               width=1360, height=900, min_size=(1024, 680))
         webview.start()          # blocks until the window is closed -> app quits
     except Exception as e:

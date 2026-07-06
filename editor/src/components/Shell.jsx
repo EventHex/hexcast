@@ -7,6 +7,8 @@ import { HelpPage } from "./HelpPage.jsx";
 import { Onboarding } from "./Onboarding.jsx";
 import { CommandPalette } from "./CommandPalette.jsx";
 import { ThemeToggle } from "./ThemeToggle.jsx";
+import logoSide from "../assets/logo-side.png";
+import logoSideWhite from "../assets/logo-side-white.png";
 
 // Persistent product shell: one top bar (Library · Brands · Settings · Help +
 // workspace stats) around every non-editor view. The editor is a separate
@@ -52,7 +54,7 @@ export function Shell({ user, onLogout } = {}) {
 
   useEffect(() => {
     api("/api/update").then((u) => {
-      if (u.available && localStorage.getItem("remaster_upd_dismiss") !== u.latest) setUpd(u);
+      if (u.available && localStorage.getItem("hexcast_upd_dismiss") !== u.latest) setUpd(u);
     }).catch(() => {});
   }, []);
 
@@ -82,13 +84,16 @@ export function Shell({ user, onLogout } = {}) {
   }, [view]);
 
   useEffect(() => {
-    if (anyKey === false && stats && stats.total === 0 && !localStorage.getItem("remaster_onboarded")) setOnboard(true);
+    if (anyKey === false && stats && stats.total === 0 && !localStorage.getItem("hexcast_onboarded")) setOnboard(true);
   }, [anyKey, stats]);
 
   return (
     <div className="app">
       <header className="shellbar">
-        <span className="brand">Remaster</span>
+        <span className="brand">
+          <img className="brand-logo brand-logo-light" src={logoSide} alt="HexCast" />
+          <img className="brand-logo brand-logo-dark" src={logoSideWhite} alt="HexCast" />
+        </span>
         <nav className="shellnav">
           {VIEWS.map(([v, label]) => (
             <button key={v} className={view === v ? "on" : ""} onClick={() => go(v)}>
@@ -128,10 +133,10 @@ export function Shell({ user, onLogout } = {}) {
 
       {upd && (
         <div className="updatebar">
-          <span>◆ Remaster {upd.latest} is available{upd.notes ? ` — ${upd.notes}` : ""}</span>
+          <span>◆ HexCast {upd.latest} is available{upd.notes ? ` — ${upd.notes}` : ""}</span>
           <span className="grow" />
           {upd.url && <a className="btn sm" href={upd.url} target="_blank" rel="noreferrer">Download update</a>}
-          <button className="mini" title="Dismiss" onClick={() => { localStorage.setItem("remaster_upd_dismiss", upd.latest); setUpd(null); }}>×</button>
+          <button className="mini" title="Dismiss" onClick={() => { localStorage.setItem("hexcast_upd_dismiss", upd.latest); setUpd(null); }}>×</button>
         </div>
       )}
 
@@ -144,8 +149,8 @@ export function Shell({ user, onLogout } = {}) {
 
       {cmdk && <CommandPalette go={(v) => { go(v); setCmdk(false); }} onClose={() => setCmdk(false)} />}
       {onboard && <Onboarding
-        onKeys={() => { localStorage.setItem("remaster_onboarded", "1"); setOnboard(false); go("settings"); }}
-        onSkip={() => { localStorage.setItem("remaster_onboarded", "1"); setOnboard(false); }} />}
+        onKeys={() => { localStorage.setItem("hexcast_onboarded", "1"); setOnboard(false); go("settings"); }}
+        onSkip={() => { localStorage.setItem("hexcast_onboarded", "1"); setOnboard(false); }} />}
     </div>
   );
 }

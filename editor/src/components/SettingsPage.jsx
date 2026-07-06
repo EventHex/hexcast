@@ -161,7 +161,7 @@ export function SettingsPage() {
 
         {tab === "about" && (
           <section className="card">
-            <span className="eyebrow">About Remaster</span>
+            <span className="eyebrow">About HexCast</span>
             <p className="hint">Version <b>{health.version || "—"}</b> · AGPL-3.0</p>
             <p className="hint">A local-first demo-video studio. Bring your own keys; nothing is sent off your machine. Zero telemetry.</p>
             <div className="row gap wrap">

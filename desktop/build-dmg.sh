@@ -20,20 +20,20 @@ command -v ffmpeg >/dev/null || echo "!! ffmpeg not on PATH — the app won't re
 
 echo "==> PyInstaller"
 rm -rf build dist
-pyinstaller --noconfirm remaster.spec
+pyinstaller --noconfirm hexcast.spec
 
-APP="dist/Remaster.app"
+APP="dist/HexCast.app"
 [ -d "$APP" ] || { echo "BUILD FAILED: $APP not produced"; exit 1; }
 
 echo "==> DMG (drag to Applications)"
 STAGE="$(mktemp -d)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-rm -f dist/Remaster.dmg
-hdiutil create -volname "Remaster" -srcfolder "$STAGE" -ov -format UDZO dist/Remaster.dmg >/dev/null
+rm -f dist/HexCast.dmg
+hdiutil create -volname "HexCast" -srcfolder "$STAGE" -ov -format UDZO dist/HexCast.dmg >/dev/null
 rm -rf "$STAGE"
 
 echo ""
-echo "Done  ->  desktop/dist/Remaster.dmg"
-echo "Open it, drag Remaster to Applications. First launch (unsigned):"
-echo "  right-click Remaster > Open, or:  xattr -dr com.apple.quarantine /Applications/Remaster.app"
+echo "Done  ->  desktop/dist/HexCast.dmg"
+echo "Open it, drag HexCast to Applications. First launch (unsigned):"
+echo "  right-click HexCast > Open, or:  xattr -dr com.apple.quarantine /Applications/HexCast.app"

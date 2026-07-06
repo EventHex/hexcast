@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot deploy of the Remaster central control plane to Cloud Run (Firestore).
+# One-shot deploy of the HexCast central control plane to Cloud Run (Firestore).
 # Prereqs (already done): gcloud auth login; Firestore DB created in asia-south1.
 #   cd central && ./deploy.sh
 #
@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 
 PROJECT="${PROJECT:-speech-to-text-app-448611}"
 REGION="${REGION:-asia-south1}"
-SERVICE="${SERVICE:-remaster-central}"
+SERVICE="${SERVICE:-hexcast-central}"
 
 PNUM="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 SA="${PNUM}-compute@developer.gserviceaccount.com"
@@ -28,14 +28,14 @@ echo "==> 2/3  session secret in Secret Manager (stable across deploys)"
 if [ ! -f .central-secret ]; then
   openssl rand -hex 32 > .central-secret && chmod 600 .central-secret
 fi
-if ! gcloud secrets describe remaster-secret --project "$PROJECT" >/dev/null 2>&1; then
-  gcloud secrets create remaster-secret --data-file=.central-secret \
+if ! gcloud secrets describe hexcast-secret --project "$PROJECT" >/dev/null 2>&1; then
+  gcloud secrets create hexcast-secret --data-file=.central-secret \
     --replication-policy=automatic --project "$PROJECT" >/dev/null
-  echo "    created secret remaster-secret"
+  echo "    created secret hexcast-secret"
 else
-  echo "    secret remaster-secret exists"
+  echo "    secret hexcast-secret exists"
 fi
-gcloud secrets add-iam-policy-binding remaster-secret --project "$PROJECT" \
+gcloud secrets add-iam-policy-binding hexcast-secret --project "$PROJECT" \
   --member="serviceAccount:${SA}" \
   --role="roles/secretmanager.secretAccessor" >/dev/null
 echo "    runtime SA can read it"
@@ -46,8 +46,8 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --memory 512Mi \
-  --set-env-vars "REMASTER_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=0.1.0" \
-  --set-secrets "SECRET_KEY=remaster-secret:latest" \
+  --set-env-vars "HEXCAST_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=0.1.0" \
+  --set-secrets "SECRET_KEY=hexcast-secret:latest" \
   --project "$PROJECT"
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
@@ -57,4 +57,4 @@ echo "Health:"
 curl -s "$URL/health"; echo ""
 echo ""
 echo "Point the desktop app at it (rebuild the DMG with this set):"
-echo "  export REMASTER_AUTH_URL=$URL"
+echo "  export HEXCAST_AUTH_URL=$URL"

@@ -6,7 +6,7 @@ export function Onboarding({ onKeys, onSkip }) {
     <div className="modal-wrap">
       <div className="onboard">
         <div className="onboard-mark">◆</div>
-        <h2>Welcome to Remaster</h2>
+        <h2>Welcome to HexCast</h2>
         <p className="onboard-lead">
           Turn a raw screen recording into a polished, revoiced, brand-framed demo video —
           on your machine, with your own keys.

@@ -127,11 +127,11 @@ def _call_cerebras(messages: list, max_tokens: int = 1024) -> dict:
 def _call_openai(messages: list, max_tokens: int = 1024) -> dict:
     """Call any OpenAI-compatible /chat/completions endpoint (OpenAI, Ollama,
     OpenRouter, LM Studio…). Base URL/model come from OPENAI_BASE_URL /
-    REMASTER_LLM_MODEL; a key is optional (local endpoints don't need one)."""
+    HEXCAST_LLM_MODEL; a key is optional (local endpoints don't need one)."""
     load_env()
     import os
     base = (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
-    model = os.environ.get("REMASTER_LLM_MODEL") or "gpt-4o-mini"
+    model = os.environ.get("HEXCAST_LLM_MODEL") or "gpt-4o-mini"
     headers = {"Content-Type": "application/json"}
     if os.environ.get("OPENAI_API_KEY"):
         headers["Authorization"] = "Bearer " + os.environ["OPENAI_API_KEY"]
@@ -144,11 +144,11 @@ def _call_openai(messages: list, max_tokens: int = 1024) -> dict:
 
 
 def _provider_chain() -> list:
-    """Engines to try, in order. Explicit REMASTER_LLM_PROVIDER pins one;
+    """Engines to try, in order. Explicit HEXCAST_LLM_PROVIDER pins one;
     'none' turns AI cleanup off; 'auto' = every configured provider."""
     load_env()
     import os
-    p = (os.environ.get("REMASTER_LLM_PROVIDER") or "auto").lower()
+    p = (os.environ.get("HEXCAST_LLM_PROVIDER") or "auto").lower()
     if p == "none":
         return []
     if p in ("cerebras", "gemini", "openai"):

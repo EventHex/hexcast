@@ -6,7 +6,7 @@ import "./styles.css";
 
 // Apply the saved theme before first paint (no flash). If unset, styles.css
 // falls back to the OS preference via prefers-color-scheme.
-const _theme = localStorage.getItem("remaster_theme");
+const _theme = localStorage.getItem("hexcast_theme");
 if (_theme) document.documentElement.setAttribute("data-theme", _theme);
 
 // Auth gate: nothing renders until we know who (if anyone) is signed in.

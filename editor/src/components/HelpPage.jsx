@@ -31,18 +31,18 @@ export function HelpPage() {
           <p className="hint">
             {info.extension_seen
               ? "Recorder extension detected — recordings land in your Library automatically."
-              : "Install the Remaster recorder extension to capture a tab + your mic straight into the Library. Not detected yet."}
+              : "Install the HexCast recorder extension to capture a tab + your mic straight into the Library. Not detected yet."}
           </p>
         </section>
         <section className="card">
           <span className="eyebrow">Docs &amp; support</span>
-          <p className="hint">Remaster is local-first and stores nothing off your machine — zero telemetry.</p>
+          <p className="hint">HexCast is local-first and stores nothing off your machine — zero telemetry.</p>
           <div className="row gap wrap">
             <a className="btn sm ghost" href="https://github.com" target="_blank" rel="noreferrer">README &amp; docs</a>
             <a className="btn sm ghost" href="https://github.com" target="_blank" rel="noreferrer">Report an issue</a>
           </div>
         </section>
-        <p className="hint">Remaster {info.version ? `v${info.version}` : ""} · AGPL-3.0</p>
+        <p className="hint">HexCast {info.version ? `v${info.version}` : ""} · AGPL-3.0</p>
       </div>
     </div>
   );

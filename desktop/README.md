@@ -1,17 +1,17 @@
-# Remaster — desktop app (unsigned build)
+# HexCast — desktop app (unsigned build)
 
 Packages the whole thing into a local app: it starts the FastAPI server on
 `127.0.0.1:8765` and opens the editor in your browser. All video processing +
 your API keys stay on your machine (model B). Accounts/usage can point at the
-central control plane via `REMASTER_AUTH_URL`.
+central control plane via `HEXCAST_AUTH_URL`.
 
 ## Build (macOS)
 ```bash
 cd desktop
 ./build-mac.sh
-open dist/Remaster.app
+open dist/HexCast.app
 ```
-User data lands in `~/Remaster/projects` (the app bundle is read-only).
+User data lands in `~/HexCast/projects` (the app bundle is read-only).
 
 > Use **Python 3.11 or 3.12** for packaging — PyInstaller support for 3.13/3.14
 > is still catching up. Make a venv if your default is newer:
@@ -30,14 +30,14 @@ User data lands in `~/Remaster/projects` (the app bundle is read-only).
 
 ## First build usually needs a tweak or two
 PyInstaller can't always see every dynamic import. If a render fails with
-`ModuleNotFoundError: X`, add `"X"` to `hiddenimports` in `remaster.spec` and
+`ModuleNotFoundError: X`, add `"X"` to `hiddenimports` in `hexcast.spec` and
 rebuild. Likely candidates: a provider SDK, `email.mime`, `encodings.idna`.
-Run `./dist/Remaster/Remaster` (not the .app) to see the server log while testing.
+Run `./dist/HexCast/HexCast` (not the .app) to see the server log while testing.
 
 ## Signing + notarization (later — needs certs)
 Unsigned apps trip Gatekeeper. To ship:
 - **macOS**: Apple Developer ID ($99/yr) →
-  `codesign --deep --force --options runtime --sign "Developer ID Application: …" dist/Remaster.app`
+  `codesign --deep --force --options runtime --sign "Developer ID Application: …" dist/HexCast.app`
   then notarize with `xcrun notarytool submit`. Bundle ffmpeg must also be signed.
 - **Windows**: a code-signing cert → `signtool sign` on the built `.exe`
   (build with `pyinstaller` on Windows; the spec is cross-platform, the `.app`
@@ -46,6 +46,6 @@ Unsigned apps trip Gatekeeper. To ship:
 ## Point at the cloud (optional)
 Set before launch to use the central control plane for accounts + usage:
 ```bash
-REMASTER_AUTH_URL=https://remaster-central-xxxx.run.app open dist/Remaster.app
+HEXCAST_AUTH_URL=https://hexcast-central-xxxx.run.app open dist/HexCast.app
 ```
 Unset → self-contained local accounts.

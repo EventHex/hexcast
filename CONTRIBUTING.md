@@ -1,6 +1,6 @@
-# Contributing to Remaster
+# Contributing to HexCast
 
-Thanks for helping! Remaster is a local-first, BYOK demo-video studio.
+Thanks for helping! HexCast is a local-first, BYOK demo-video studio.
 
 ## Dev setup
 

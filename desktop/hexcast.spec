@@ -1,5 +1,5 @@
-# PyInstaller spec for the Remaster desktop app (macOS .app / onedir).
-# Build:  cd desktop && pyinstaller remaster.spec
+# PyInstaller spec for the HexCast desktop app (macOS .app / onedir).
+# Build:  cd desktop && pyinstaller hexcast.spec
 #
 # This bundles the FastAPI app + pipeline + editor build + assets + a copy of
 # ffmpeg, and produces a launcher that also serves as the pipeline-subprocess
@@ -50,10 +50,10 @@ excludes = ["torch", "faster_whisper", "ctranslate2", "tkinter", "matplotlib", "
 a = Analysis(["launcher.py"], pathex=[ROOT], binaries=_ffbins, datas=datas,
              hiddenimports=hiddenimports, excludes=excludes, noarchive=False)
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Remaster",
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="HexCast",
           console=True, disable_windowed_traceback=False)
-coll = COLLECT(exe, a.binaries, a.datas, name="Remaster")
+coll = COLLECT(exe, a.binaries, a.datas, name="HexCast")
 
 # macOS .app wrapper
-app = BUNDLE(coll, name="Remaster.app", icon=None, bundle_identifier="ai.eventhex.remaster",
+app = BUNDLE(coll, name="HexCast.app", icon="hexcast.icns", bundle_identifier="ai.eventhex.hexcast",
              info_plist={"CFBundleShortVersionString": "0.1.0", "NSHighResolutionCapable": True})

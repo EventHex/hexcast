@@ -23,8 +23,8 @@ PBKDF2_ROUNDS = 200_000
 SESSION_DAYS = 30
 
 # Backend: SQLite (default, local) | Postgres (DATABASE_URL) | Firestore
-# (REMASTER_BACKEND=firestore — serverless, scales to zero, the Cloud Run pick).
-_FS = os.environ.get("REMASTER_BACKEND", "").lower() == "firestore"
+# (HEXCAST_BACKEND=firestore — serverless, scales to zero, the Cloud Run pick).
+_FS = os.environ.get("HEXCAST_BACKEND", "").lower() == "firestore"
 _PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 _PH = "%s" if _PG else "?"          # placeholder differs across drivers
 _SECRET = None
@@ -75,7 +75,7 @@ def init() -> None:
 
 
 def _load_secret() -> str:
-    env = os.environ.get("SECRET_KEY") or os.environ.get("REMASTER_SECRET_KEY")
+    env = os.environ.get("SECRET_KEY") or os.environ.get("HEXCAST_SECRET_KEY")
     if env:
         return env
     # dev fallback: persist a local secret so restarts don't invalidate sessions

@@ -1,4 +1,4 @@
-"""Remaster central control plane — accounts + usage.
+"""HexCast central control plane — accounts + usage.
 
 Deliberately tiny: it never sees video or keys. The desktop app does all
 processing locally with the user's own keys, and only talks to this service to
@@ -17,7 +17,7 @@ from fastapi.responses import RedirectResponse
 
 import store
 
-app = FastAPI(title="Remaster Central")
+app = FastAPI(title="HexCast Central")
 store.init()
 
 # The desktop app calls this server-to-server, but allow browser origins too
@@ -39,7 +39,7 @@ def _bearer(authorization: str | None) -> dict:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "remaster-central",
+    return {"ok": True, "service": "hexcast-central",
             "db": "firestore" if store._FS else ("postgres" if store._PG else "sqlite"),
             "google": bool(os.environ.get("GOOGLE_OAUTH_CLIENT_ID"))}
 
@@ -48,8 +48,8 @@ def health():
 def latest_update():
     """Release manifest the desktop app polls for auto-update. Set per release
     with env vars on the service (no redeploy needed):
-        gcloud run services update remaster-central \\
-          --set-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/Remaster.dmg
+        gcloud run services update hexcast-central \\
+          --set-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/HexCast.dmg
     Falls back to central/update_manifest.json for local runs."""
     v = os.environ.get("UPDATE_VERSION")
     if v:

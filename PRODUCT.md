@@ -1,4 +1,4 @@
-# Remaster — Product Gap Analysis & Target IA (2026-07-04)
+# HexCast — Product Gap Analysis & Target IA (2026-07-04)
 
 > **BUILT 2026-07-04 — the P0/P1/P2 backlog below is implemented.** App shell
 > (Library/Brands/Settings/Help + stats + ⌘K palette), Brands screen with live

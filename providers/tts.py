@@ -18,7 +18,7 @@ _GOOGLE_HINTS = ("Chirp", "Journey", "Neural2", "Wavenet", "Standard", "Studio")
 def resolve_provider(explicit: str | None = None) -> str:
     """Effective TTS provider. 'auto' = google if a key is configured, else
     'original' (keep the recorded voice — the zero-key default)."""
-    p = (explicit or os.environ.get("REMASTER_TTS_PROVIDER") or "auto").lower()
+    p = (explicit or os.environ.get("HEXCAST_TTS_PROVIDER") or "auto").lower()
     if p != "auto":
         return p
     if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") \

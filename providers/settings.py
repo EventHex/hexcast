@@ -4,7 +4,7 @@ Stored at <data_dir>/settings.json (chmod 600). Keys entered in the editor's
 Settings tab take precedence over .env / shell environment. The server never
 returns raw keys to the browser — only {set, hint} via masked_view().
 
-Provider selections ship to the pipeline subprocesses as REMASTER_*_PROVIDER
+Provider selections ship to the pipeline subprocesses as HEXCAST_*_PROVIDER
 env vars; keys ship under their canonical env names. Pipeline code keeps
 reading os.environ unchanged.
 """
@@ -45,8 +45,8 @@ SECTIONS = ("stt", "llm", "vision", "tts", "retention", "workspace")
 def _multiuser() -> bool:
     """Multi-user (SaaS) mode: keys are strictly per-user. The shared process
     environment / .env must NOT act as a fallback, or one account's keys would
-    leak to everyone (and bill the host). Set via REMASTER_MULTIUSER."""
-    return bool(os.environ.get("REMASTER_MULTIUSER"))
+    leak to everyone (and bill the host). Set via HEXCAST_MULTIUSER."""
+    return bool(os.environ.get("HEXCAST_MULTIUSER"))
 
 
 def _path(data_dir):
@@ -114,11 +114,11 @@ def provider_env(data_dir) -> dict:
     for sect in ("stt", "llm", "vision", "tts"):
         prov = s[sect].get("provider") or "auto"
         if prov != "auto":
-            env[f"REMASTER_{sect.upper()}_PROVIDER"] = prov
+            env[f"HEXCAST_{sect.upper()}_PROVIDER"] = prov
     if s["llm"].get("openai_base_url"):
         env["OPENAI_BASE_URL"] = s["llm"]["openai_base_url"]
     if s["llm"].get("openai_model"):
-        env["REMASTER_LLM_MODEL"] = s["llm"]["openai_model"]
+        env["HEXCAST_LLM_MODEL"] = s["llm"]["openai_model"]
     return env
 
 

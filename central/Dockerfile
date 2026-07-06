@@ -1,4 +1,4 @@
-# Remaster central control plane — Cloud Run image.
+# HexCast central control plane — Cloud Run image.
 FROM python:3.12-slim
 
 WORKDIR /app

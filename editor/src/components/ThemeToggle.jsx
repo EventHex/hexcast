@@ -5,13 +5,13 @@ import React, { useState } from "react";
 // applies the stored choice before first paint so there's no flash.
 export function ThemeToggle() {
   const [dark, setDark] = useState(() => {
-    const t = localStorage.getItem("remaster_theme");
+    const t = localStorage.getItem("hexcast_theme");
     return t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const flip = () => {
     const d = !dark;
     document.documentElement.setAttribute("data-theme", d ? "dark" : "light");
-    localStorage.setItem("remaster_theme", d ? "dark" : "light");
+    localStorage.setItem("hexcast_theme", d ? "dark" : "light");
     setDark(d);
   };
   return (

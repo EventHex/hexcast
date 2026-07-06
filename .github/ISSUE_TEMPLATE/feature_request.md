@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Something Remaster should do
+about: Something HexCast should do
 ---
 
 **What are you trying to make / automate?**

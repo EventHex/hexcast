@@ -134,9 +134,9 @@ def _resolve(d):
 
 
 def _vision_chain():
-    """Engines to try, in order. REMASTER_VISION_PROVIDER pins one; 'none'
+    """Engines to try, in order. HEXCAST_VISION_PROVIDER pins one; 'none'
     turns AI targeting off (recorded clicks only); 'auto' = every configured."""
-    p = (os.environ.get("REMASTER_VISION_PROVIDER") or "auto").lower()
+    p = (os.environ.get("HEXCAST_VISION_PROVIDER") or "auto").lower()
     if p == "none":
         return []
     if p == "cerebras":

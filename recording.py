@@ -72,7 +72,7 @@ def start(raw_path: str, screen_index: int, mic_index=None, fps: int = 30) -> No
         if proc.poll() is not None:
             err = (proc.stderr.read() or b"").decode("utf-8", "ignore")[-300:]
             raise RuntimeError("could not start capture — grant Screen Recording "
-                               "permission to Remaster in System Settings. " + err)
+                               "permission to HexCast in System Settings. " + err)
         _active.update(proc=proc, path=raw_path, started=time.time())
 
 

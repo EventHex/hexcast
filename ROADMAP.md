@@ -1,4 +1,4 @@
-# Remaster — A→Z Roadmap
+# HexCast — A→Z Roadmap
 
 *(working name; product = open-source demo-video studio: raw screen recording → revoiced, brand-framed product video)*
 
@@ -15,7 +15,7 @@ Decisions locked (2026-07-03):
 - **Target user**: SaaS founders / product owners producing many demo videos without editing skills. Benchmark: Trupeer.ai; OSS playbook benchmark: Cap (cap.so).
 - **Open source, BYOK-first**: users bring their own AI keys; credible zero-key local mode. Desktop app explicitly dropped.
 - **License**: AGPL-3.0 + open-core (cloud/team features paid later).
-- **Brand**: "Remaster" (working name — trademark/domain check before announce). EventHex demoted to *first client*: its logo/colors ship only as the default example brand.
+- **Brand**: "HexCast" (working name — trademark/domain check before announce). EventHex demoted to *first client*: its logo/colors ship only as the default example brand.
 - App chrome rebrand already done (editor header, titles, README, FastAPI title).
 
 Architecture facts that drive the plan (verified):
@@ -28,18 +28,18 @@ Architecture facts that drive the plan (verified):
 
 ## Phase 0 — De-risk in place (0.5d)
 - Fix `lib/revoice/zoom_decide.py:19` — lazy `os.environ.get("GEMINI_API_KEY")`, build URL inside `_gemini_vision`.
-- `transcribe.py`: honor `REMASTER_STT_PROVIDER=local` / missing `GROQ_API_KEY` → skip Groq loop cleanly.
+- `transcribe.py`: honor `HEXCAST_STT_PROVIDER=local` / missing `GROQ_API_KEY` → skip Groq loop cleanly.
 
 **Verify**: unset all keys, run transcribe on a sample project — local whisper path completes; zoom step degrades to events-only without crash.
 
 ## Phase 1 — Repo extraction (1.5–2d)
-New standalone repo `remaster/`:
+New standalone repo `hexcast/`:
 
 ```
 app.py  index.html  editor/  assets/  pipeline/   # ex lib/revoice
 providers/          # NEW (settings.py, tts.py)
 lib/env_loader.py   tools/{base_tool,google_credentials,audio/*}.py   # vendored verbatim
-projects/           # gitignored; REMASTER_DATA_DIR overrides
+projects/           # gitignored; HEXCAST_DATA_DIR overrides
 .env.example  requirements.txt  LICENSE(AGPL-3.0)  README.md
 ```
 
@@ -47,7 +47,7 @@ Keep `lib/`+`tools/` names so imports resolve unchanged. Changes:
 - `pipeline/build_revoice.py:15` — cwd sys.path → anchor `Path(__file__).parents[1]`.
 - `pipeline/cerebras_clean.py:24-27` — 3-level walk → 2-level.
 - `pipeline/config.py:49-53` — default logo → `assets/`; tolerant loading for stale absolute `logo`/`music` paths in old configs (remap by basename or drop to default).
-- `app.py` — `PROJECTS = $REMASTER_DATA_DIR or ./projects`; `_spawn` passes **absolute** project dirs; script paths + pkill regex `lib/revoice/` → `pipeline/`.
+- `app.py` — `PROJECTS = $HEXCAST_DATA_DIR or ./projects`; `_spawn` passes **absolute** project dirs; script paths + pkill regex `lib/revoice/` → `pipeline/`.
 - `requirements.txt` (fastapi, uvicorn, requests, google-auth; `faster-whisper` as optional extra — currently missing from every requirements file). `.env.example` trimmed to the 6 real keys.
 - `!editor/dist/` gitignore negation (committed build must survive).
 
@@ -64,7 +64,7 @@ Keep `lib/`+`tools/` names so imports resolve unchanged. Changes:
 ## Phase 3 — New providers (2–3d)
 - `providers/tts.py`: `synth(text, voice, lang, output_path, provider)` dispatching Google / ElevenLabs / Piper (BaseTool classes already exist, vendored). Swap only the inner call in `build_revoice.py:342-371`; **do not touch** ThreadPoolExecutor, 3-retry, `_needs_tts`, content-addressed cache, `voiced_sig`.
 - `GET /api/voices?provider=elevenlabs` (live voice list + `preview_url`; optional cache under `<DATA_DIR>/voice_cache/`). AudioPanel provider switch; preview button uses `preview_url` for ElevenLabs.
-- LLM: `_call_openai_compat` in `cerebras_clean.py` (`OPENAI_BASE_URL` covers OpenAI/Ollama/OpenRouter/LM Studio); gate on `REMASTER_LLM_PROVIDER` incl. `none` = identity passthrough. Same gating for vision (`none` → events-only zooms).
+- LLM: `_call_openai_compat` in `cerebras_clean.py` (`OPENAI_BASE_URL` covers OpenAI/Ollama/OpenRouter/LM Studio); gate on `HEXCAST_LLM_PROVIDER` incl. `none` = identity passthrough. Same gating for vision (`none` → events-only zooms).
 
 **Verify**: one project rendered per provider path (Google, ElevenLabs, Piper, Ollama-clean, none/none).
 

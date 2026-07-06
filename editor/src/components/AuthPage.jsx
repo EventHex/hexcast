@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import logoStack from "../assets/logo-stack.png";
 
 // Sign-in / sign-up gate. Shown until /api/auth/me returns a user. On success
 // the session cookie is set by the server and onAuthed(user) swaps in the app.
@@ -29,7 +30,7 @@ export function AuthPage({ onAuthed, google }) {
   return (
     <div className="authwrap">
       <form className="authcard" onSubmit={submit}>
-        <div className="authbrand">Remaster</div>
+        <img className="authbrand-logo" src={logoStack} alt="HexCast" />
         <p className="hint" style={{ textAlign: "center", marginTop: -4 }}>
           Your studio for demo & how-to videos.
         </p>
