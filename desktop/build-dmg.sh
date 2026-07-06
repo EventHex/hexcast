@@ -23,6 +23,7 @@ if xcrun --find swiftc >/dev/null 2>&1; then
   xcrun swiftc -O -target arm64-apple-macos14.0 \
     -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia \
     -framework CoreGraphics -framework AppKit \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker recorder/Info.plist \
     recorder/HexCastRecorder.swift -o bin/hexcast-recorder \
     && echo "   built bin/hexcast-recorder" \
     || echo "!! swiftc failed — window recording falls back to whole-screen ffmpeg"
@@ -58,13 +59,13 @@ tell application "Finder"
     set current view of container window to icon view
     set toolbar visible of container window to false
     set statusbar visible of container window to false
-    set the bounds of container window to {200, 120, 800, 520}
+    set the bounds of container window to {320, 140, 960, 610}
     set vopts to the icon view options of container window
     set arrangement of vopts to not arranged
-    set icon size of vopts to 112
+    set icon size of vopts to 80
     set background picture of vopts to file ".background:bg.png"
-    set position of item "HexCast.app" of container window to {150, 236}
-    set position of item "Applications" of container window to {450, 236}
+    set position of item "HexCast.app" of container window to {180, 300}
+    set position of item "Applications" of container window to {460, 300}
     update without registering applications
     delay 1
     close

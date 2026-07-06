@@ -52,7 +52,8 @@ def list_devices() -> dict:
         try:
             p = subprocess.run([h, "list"], capture_output=True, text=True, timeout=15)
             d = json.loads(p.stdout)
-            return {"screens": d.get("screens", []),
+            return {"permission": d.get("permission", True),
+                    "screens": d.get("screens", []),
                     "windows": d.get("windows", []),
                     "mics": d.get("mics", [])}
         except Exception:

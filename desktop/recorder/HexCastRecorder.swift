@@ -63,7 +63,18 @@ func fetchContent() -> SCShareableContent {
 
 // MARK: - list
 
+func ensurePermission() -> Bool {
+    // Enumerating windows / capturing needs Screen Recording permission. Merely
+    // reading content does NOT prompt, so request explicitly — this registers
+    // the app in System Settings > Privacy > Screen Recording and prompts once.
+    let ok = CGPreflightScreenCaptureAccess()
+    if !ok { _ = CGRequestScreenCaptureAccess() }
+    return ok
+}
+
+
 func runList() {
+    let hasPerm = ensurePermission()
     let content = fetchContent()
     // screens: token "screen:<displayID>"
     var screens: [String] = []
@@ -88,7 +99,8 @@ func runList() {
     for dev in discovery.devices {
         mics.append("{\"index\":\(jsonString("mic:" + dev.uniqueID)),\"name\":\(jsonString(dev.localizedName))}")
     }
-    print("{\"screens\":[\(screens.joined(separator: ","))],"
+    print("{\"permission\":\(hasPerm),"
+        + "\"screens\":[\(screens.joined(separator: ","))],"
         + "\"windows\":[\(windows.joined(separator: ","))],"
         + "\"mics\":[\(mics.joined(separator: ","))]}")
 }
@@ -206,6 +218,7 @@ func runRecord() {
     // otherwise aborts with CGS_REQUIRE_INIT. Touching NSApplication.shared
     // initializes the GUI/CGS connection without running an event loop.
     _ = NSApplication.shared
+    _ = ensurePermission()
     let content = fetchContent()
 
     // resolve the target token to an SCContentFilter + capture size

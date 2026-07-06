@@ -215,10 +215,20 @@ export function Library({ onChange }) {
                     {devices.mics.map((m) => <option key={m.index} value={m.index}>{m.name}</option>)}
                   </select>
                 </label>
-                {devices.windows?.length === 0 && (
-                  <p className="hint">Only whole screens are available — install/enable the recorder to capture a single window.</p>
+                {devices.permission === false ? (
+                  <div className="field" style={{ gap: 8 }}>
+                    <p className="hint" style={{ color: "var(--warn)" }}>
+                      HexCast needs <b>Screen Recording</b> permission to list your windows. Approve the
+                      macOS prompt, or enable HexCast under <b>System Settings → Privacy &amp; Security →
+                      Screen&nbsp;Recording</b>, then recheck.
+                    </p>
+                    <button className="btn sm ghost" onClick={openRecorder}>I’ve enabled it — recheck</button>
+                  </div>
+                ) : devices.windows?.length === 0 ? (
+                  <p className="hint">No separate windows detected — you can still record the whole screen.</p>
+                ) : (
+                  <p className="hint">Tip: pick a single window to keep everything else out of the shot.</p>
                 )}
-                <p className="hint">First recording asks for macOS Screen Recording permission — approve it, then record again.</p>
               </>
             )}
             <div className="row gap" style={{ marginTop: 6 }}>
