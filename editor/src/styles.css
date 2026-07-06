@@ -372,7 +372,7 @@ kbd { background: var(--panel2); border: 1px solid var(--line-strong); border-ra
 
 /* --- HexCast brand logos --- */
 .brand { display: inline-flex; align-items: center; }
-.brand-logo { height: 24px; width: auto; display: block; }
+.brand-logo { height: 27px; width: auto; display: block; }
 .brand-logo-dark { display: none; }
 @media (prefers-color-scheme: dark) {
   .brand-logo-light { display: none; }

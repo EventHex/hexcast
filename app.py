@@ -66,7 +66,7 @@ def _with_keys(fn):
                 else:
                     os.environ[k] = v
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 _EXT_SEEN = {"at": 0.0}   # last time the recorder extension pinged us
 
 app = FastAPI(title="HexCast")
