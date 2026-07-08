@@ -62,4 +62,4 @@ coll = COLLECT(exe, a.binaries, a.datas, name="HexCast")
 
 # macOS .app wrapper
 app = BUNDLE(coll, name="HexCast.app", icon="hexcast.icns", bundle_identifier="ai.eventhex.hexcast",
-             info_plist={"CFBundleShortVersionString": "0.2.0", "NSHighResolutionCapable": True})
+             info_plist={"CFBundleShortVersionString": "0.2.1", "NSHighResolutionCapable": True})

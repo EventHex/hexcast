@@ -1,7 +1,7 @@
 {
-  "version": "0.2.0",
+  "version": "0.2.1",
   "url": "https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg",
   "mac_url": "https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg",
   "win_url": "https://github.com/EventHex/hexcast/releases/latest/download/HexCast-Windows.zip",
-  "notes": "Bigger, clearer app logo; window/screen recording."
+  "notes": "Manual check-for-update button in Settings."
 }
