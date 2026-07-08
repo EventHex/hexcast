@@ -40,6 +40,8 @@ export function SettingsPage() {
   const [health, setHealth] = useState({});
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [upd, setUpd] = useState(null);       // {current,latest,available,url,notes}
+  const [checking, setChecking] = useState(false);
 
   const refresh = async () => {
     const v = await api("/api/settings");
@@ -51,6 +53,12 @@ export function SettingsPage() {
     setKeys({}); setDirty(false);
   };
   useEffect(() => { refresh().catch(() => {}); api("/api/health").then(setHealth).catch(() => {}); }, []);
+  const checkForUpdate = async () => {
+    setChecking(true);
+    try { setUpd(await api("/api/update?force=1")); }
+    catch { setUpd({ error: true }); }
+    setChecking(false);
+  };
   if (!view) return <div className="page"><div className="page-body"><p className="hint">Loading…</p></div></div>;
 
   const mark = (fn) => (...a) => { fn(...a); setDirty(true); setSaved(false); };
@@ -165,9 +173,21 @@ export function SettingsPage() {
             <p className="hint">Version <b>{health.version || "—"}</b> · AGPL-3.0</p>
             <p className="hint">A local-first demo-video studio. Bring your own keys; nothing is sent off your machine. Zero telemetry.</p>
             <div className="row gap wrap">
-              <a className="btn sm ghost" href="https://github.com" target="_blank" rel="noreferrer">GitHub</a>
-              <a className="btn sm ghost" href="https://github.com" target="_blank" rel="noreferrer">Releases</a>
+              <a className="btn sm ghost" href="https://github.com/EventHex/hexcast" target="_blank" rel="noreferrer">GitHub</a>
+              <a className="btn sm ghost" href="https://github.com/EventHex/hexcast/releases" target="_blank" rel="noreferrer">Releases</a>
+              <button className="btn sm ghost" disabled={checking} onClick={checkForUpdate}>
+                {checking ? "Checking…" : "Check for update"}
+              </button>
             </div>
+            {upd?.error && <p className="hint" style={{ color: "var(--bad)" }}>Couldn't reach the update server — check your connection.</p>}
+            {upd && !upd.error && (
+              upd.available
+                ? <p className="hint" style={{ color: "var(--accent)" }}>
+                    HexCast <b>{upd.latest}</b> is available{upd.notes ? ` — ${upd.notes}` : ""}.{" "}
+                    {upd.url && <a href={upd.url} target="_blank" rel="noreferrer">Download update</a>}
+                  </p>
+                : <p className="hint">You're on the latest version.</p>
+            )}
           </section>
         )}
       </div>

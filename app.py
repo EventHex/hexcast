@@ -1102,10 +1102,10 @@ def _update_manifest_url() -> str:
 
 
 @app.get("/api/update")
-def check_update():
+def check_update(force: bool = False):
     import time as _t
     now = _t.time()
-    if _UPD["data"] is None or now - _UPD["at"] > 3600:
+    if force or _UPD["data"] is None or now - _UPD["at"] > 3600:
         _UPD["at"] = now
         _UPD["data"] = {}
         url = _update_manifest_url()
