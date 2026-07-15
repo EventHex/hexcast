@@ -31,9 +31,11 @@ export function ExportDrawer({ pid, cfg, downloadKey, onClose, onRender }) {
             <section>
               <span className="eyebrow">Video</span>
               {out.aspects.map((a) => dl(`Video ${a.replace("x", ":")}`, `/media/${pid}/framed-${a}.mp4`))}
-              {out.platform === "darwin" && (
+              {(out.platform === "darwin" || out.platform === "win32") && (
                 <button className="pub-item asbtn" onClick={reveal}>
-                  <span>{revealed ? "Revealed in Finder ✓" : "Reveal in Finder"}</span><span className="pub-dl">↗</span>
+                  <span>{revealed
+                    ? (out.platform === "darwin" ? "Revealed in Finder ✓" : "Revealed in Explorer ✓")
+                    : (out.platform === "darwin" ? "Reveal in Finder" : "Show in Explorer")}</span><span className="pub-dl">↗</span>
                 </button>
               )}
             </section>
