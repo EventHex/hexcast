@@ -89,6 +89,30 @@ def _reap_orphans():
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+def _proc_group_kwargs() -> dict:
+    """Spawn a render child in its own process group so cancel can take down the
+    whole tree (ffmpeg grandchildren included). POSIX uses a new session;
+    Windows uses a new process group (killable with taskkill /T)."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _kill_proc_tree(p) -> None:
+    """Terminate a render child and its descendants, cross-platform."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+        else:
+            import signal
+            os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+    except Exception:
+        try:
+            p.terminate()
+        except Exception:
+            pass
+
+
 @app.middleware("http")
 async def _no_cache_html(request, call_next):
     """Never cache the HTML document. Vite hashes asset filenames per build, so
@@ -419,8 +443,8 @@ def run_job(job: str, steps, cwd, proj: str, record_state=False, env=None):
                 # own process group: cancelling kills ffmpeg grandchildren too,
                 # never leaving orphan encoders writing into project files
                 p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     text=True, start_new_session=True,
-                                     env={**os.environ, **(env or {})})
+                                     text=True, env={**os.environ, **(env or {})},
+                                     **_proc_group_kwargs())
                 JOBS[job]["_proc"] = p
                 errbuf: list = []
                 t = threading.Thread(target=lambda: errbuf.append(p.stderr.read() or ""), daemon=True)
@@ -1330,14 +1354,7 @@ def job_cancel(job: str):
     j["cancel"] = True
     p = j.get("_proc")
     if p is not None:
-        try:
-            import signal
-            os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-        except Exception:
-            try:
-                p.terminate()
-            except Exception:
-                pass
+        _kill_proc_tree(p)
     return {"ok": True}
 
 
@@ -1517,12 +1534,18 @@ def preview_gif(pid: str):
 
 @app.post("/api/projects/{pid}/reveal")
 def reveal(pid: str):
-    """Open the project's export in the OS file browser (macOS/Linux)."""
+    """Open the project's export in the OS file browser (macOS/Windows/Linux)."""
     d = proj_dir(pid)
     target = next((os.path.join(d, f"framed-{a}.mp4") for a in ("16x9", "9x16", "1x1")
                    if os.path.exists(os.path.join(d, f"framed-{a}.mp4"))), d)
     if sys.platform == "darwin":
         subprocess.Popen(["open", "-R", target])
+    elif os.name == "nt":
+        # explorer /select, highlights the file; on a dir it opens the folder.
+        if os.path.isdir(target):
+            os.startfile(target)  # noqa: mac/linux lack os.startfile; guarded by os.name
+        else:
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(target)])
     elif sys.platform.startswith("linux"):
         subprocess.Popen(["xdg-open", os.path.dirname(target)])
     else:

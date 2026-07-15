@@ -6,12 +6,18 @@ own window), plus an optional mic, capturing straight into a project. This is
 the payoff of the desktop app: no browser extension.
 
 Fallback (helper missing, e.g. a dev checkout that hasn't compiled it): ffmpeg
-avfoundation, whole-screen only. Both stop cleanly on SIGINT so the mp4 gets a
-proper moov atom.
+avfoundation on macOS, whole-screen only. Both stop cleanly on SIGINT so the
+mp4 gets a proper moov atom.
+
+Windows: there is no ScreenCaptureKit, so recording runs through ffmpeg's
+gdigrab (whole screen or a single window by title) plus dshow for the mic.
+ffmpeg is finalized by writing "q" to its stdin (SIGINT isn't deliverable to a
+child on Windows), which still yields a clean moov atom.
 
 Device tokens are opaque strings the matching backend understands:
-  helper : "screen:<displayID>", "window:<windowID>", "mic:<uniqueID>"
-  ffmpeg : "avf-screen:<index>", "avf-mic:<index>"
+  helper  : "screen:<displayID>", "window:<windowID>", "mic:<uniqueID>"
+  avf     : "avf-screen:<index>", "avf-mic:<index>"
+  gdigrab : "gdi-screen:desktop", "gdi-window:<title>", "dshow-mic:<name>"
 """
 from __future__ import annotations
 
@@ -23,6 +29,8 @@ import signal
 import subprocess
 import threading
 import time
+
+IS_WIN = os.name == "nt"
 
 _active: dict = {}
 _lock = threading.Lock()
@@ -58,6 +66,8 @@ def list_devices() -> dict:
                     "mics": d.get("mics", [])}
         except Exception:
             pass  # fall back to ffmpeg enumeration
+    if IS_WIN:
+        return _win_list()
     return _ffmpeg_list()
 
 
@@ -92,7 +102,10 @@ def start(raw_path: str, target: str, mic=None, fps: int = 30) -> None:
                     pass
                 raise RuntimeError("could not start capture — grant Screen Recording "
                                    "permission to HexCast in System Settings. " + err)
-            _active.update(proc=proc, path=raw_path, started=time.time())
+            _active.update(proc=proc, path=raw_path, started=time.time(), stop="sigint")
+            return
+        if IS_WIN:
+            _win_start(raw_path, target, mic, fps)
             return
         _ffmpeg_start(raw_path, target, mic, fps)
 
@@ -102,9 +115,16 @@ def stop() -> dict | None:
         if not _active:
             return None
         proc, path = _active["proc"], _active["path"]
-        # SIGINT -> the helper / ffmpeg finalizes the container (moov atom).
+        # Ask the child to finalize the container (write the moov atom):
+        #  - ffmpeg on Windows: SIGINT can't be delivered to a child, so send
+        #    "q" on stdin, which ffmpeg treats as a graceful quit.
+        #  - helper / avfoundation ffmpeg on macOS: SIGINT.
         try:
-            proc.send_signal(signal.SIGINT)
+            if _active.get("stop") == "q" and proc.stdin:
+                proc.stdin.write(b"q")
+                proc.stdin.flush()
+            else:
+                proc.send_signal(signal.SIGINT)
         except Exception:
             pass
         try:
@@ -166,4 +186,95 @@ def _ffmpeg_start(raw_path: str, target: str, mic, fps: int) -> None:
         err = (proc.stderr.read() or b"").decode("utf-8", "ignore")[-300:]
         raise RuntimeError("could not start capture — grant Screen Recording "
                            "permission to HexCast in System Settings. " + err)
-    _active.update(proc=proc, path=raw_path, started=time.time())
+    _active.update(proc=proc, path=raw_path, started=time.time(), stop="sigint")
+
+
+# ---- Windows: ffmpeg gdigrab (screen or window) + dshow mic ---------------
+
+def _win_windows() -> list[str]:
+    """Visible top-level window titles, HexCast's own window excluded. gdigrab
+    captures a window by its title, so the title is the device token."""
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    titles: list[str] = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def _cb(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        n = user32.GetWindowTextLengthW(hwnd)
+        if n <= 0:
+            return True
+        buf = ctypes.create_unicode_buffer(n + 1)
+        user32.GetWindowTextW(hwnd, buf, n + 1)
+        t = (buf.value or "").strip()
+        if t and t.lower() != "program manager" and "hexcast" not in t.lower():
+            titles.append(t)
+        return True
+
+    user32.EnumWindows(_cb, 0)
+    seen, out = set(), []
+    for t in titles:                       # dedupe, keep first-seen order
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
+def _dshow_mics() -> list[dict]:
+    """Audio capture devices from ffmpeg's DirectShow enumeration."""
+    try:
+        p = subprocess.run(["ffmpeg", "-hide_banner", "-f", "dshow",
+                            "-list_devices", "true", "-i", "dummy"],
+                           capture_output=True, text=True, timeout=15)
+    except Exception:
+        return []
+    mics, section = [], None
+    for line in p.stderr.splitlines():
+        low = line.lower()
+        if "audio devices" in low:
+            section = "a"; continue
+        if "video devices" in low:
+            section = "v"; continue
+        if "alternative name" in low:      # skip the @device_cm_… alias line
+            continue
+        m = re.search(r'"([^"]+)"', line)
+        if m and section == "a":
+            name = m.group(1)
+            mics.append({"index": f"dshow-mic:{name}", "name": name})
+    return mics
+
+
+def _win_list() -> dict:
+    return {"permission": True,
+            "screens": [{"index": "gdi-screen:desktop", "name": "Entire screen"}],
+            "windows": [{"index": f"gdi-window:{t}", "name": t} for t in _win_windows()],
+            "mics": _dshow_mics()}
+
+
+def _win_start(raw_path: str, target: str, mic, fps: int) -> None:
+    if target.startswith("gdi-window:"):
+        src = "title=" + target.split(":", 1)[1]
+    else:                                  # gdi-screen:desktop
+        src = "desktop"
+    use_mic = bool(mic and str(mic).startswith("dshow-mic:"))
+    # gdigrab has no hardware encoder guarantee -> libx264 (in the essentials
+    # build). "q" on stdin later finalizes the file, so keep stdin a PIPE.
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-f", "gdigrab",
+           "-framerate", str(fps), "-draw_mouse", "1", "-i", src]
+    if use_mic:
+        cmd += ["-f", "dshow", "-i", "audio=" + str(mic).split(":", 1)[1]]
+    cmd += ["-fps_mode", "cfr", "-r", str(fps),
+            "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M", "-pix_fmt", "yuv420p"]
+    if use_mic:
+        cmd += ["-c:a", "aac", "-b:a", "128k"]
+    cmd += [raw_path]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    time.sleep(1.0)
+    if proc.poll() is not None:
+        err = (proc.stderr.read() or b"").decode("utf-8", "ignore")[-400:]
+        raise RuntimeError("could not start screen capture. " + err)
+    _active.update(proc=proc, path=raw_path, started=time.time(), stop="q")

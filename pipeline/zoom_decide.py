@@ -37,8 +37,12 @@ PROMPT = (
 
 
 def _font(size):
-    for p in ["/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-              "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"]:
+    try:
+        import fonts as _fonts
+        cands = _fonts.system_fallbacks(bold=True)
+    except Exception:
+        cands = []
+    for p in cands:
         if os.path.exists(p):
             try:
                 return ImageFont.truetype(p, size)

@@ -108,10 +108,7 @@ def find_font(size, bold=True):
             return ImageFont.truetype(p, size)
         except Exception:
             pass
-    cands = (["/System/Library/Fonts/Supplemental/Arial Bold.ttf"] if bold else []) + [
-        "/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/SFNS.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"]
-    for p in cands:
+    for p in _fonts.system_fallbacks(bold=bold):
         if os.path.exists(p):
             try:
                 return ImageFont.truetype(p, size)

@@ -119,12 +119,16 @@ def zoom_filter(cx, cy, scale, seg_len, W, H, fps=30, speed=3):
     return f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={W}x{H}:fps={fps}"
 
 
-# Arial Unicode first: broad glyph coverage so non-Latin captions (Hindi/Arabic/Tamil/CJK…) render.
-CAP_FONT = next((p for p in ["/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-                             "/Library/Fonts/Arial Unicode.ttf",
-                             "/System/Library/Fonts/Supplemental/Arial.ttf",
-                             "/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc"]
-                 if os.path.exists(p)), None)
+# Broad glyph coverage first so non-Latin captions (Hindi/Arabic/Tamil/CJK…) render.
+def _caption_font():
+    try:
+        import fonts as _fonts
+        cands = _fonts.system_fallbacks(broad=True)
+    except Exception:
+        cands = []
+    return next((p for p in cands if os.path.exists(p)), None)
+
+CAP_FONT = _caption_font()
 
 
 def _wrap(text, width=42, max_lines=3):
@@ -160,8 +164,7 @@ def find_font(size, bold=True):
             return ImageFont.truetype(p, size)
         except Exception:
             pass
-    for p in ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/SFNS.ttf",
-              "/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"]:
+    for p in _fonts.system_fallbacks(bold=bold):
         if os.path.exists(p):
             try: return ImageFont.truetype(p, size)
             except Exception: pass
