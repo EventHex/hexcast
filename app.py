@@ -75,9 +75,16 @@ app = FastAPI(title="HexCast")
 @app.on_event("startup")
 def _reap_orphans():
     """A previous server instance may have died mid-render, orphaning pipeline
-    processes that keep writing into project files. Reap them on boot."""
-    subprocess.run(["pkill", "-f", r"pipeline/(build_revoice|polish_export|transcribe)\.py"],
-                   capture_output=True)
+    processes that keep writing into project files. Reap them on boot.
+    pkill is POSIX-only; skip on Windows and never let cleanup abort startup
+    (a missing pkill would raise FileNotFoundError and kill the boot)."""
+    if os.name == "nt":
+        return
+    try:
+        subprocess.run(["pkill", "-f", r"pipeline/(build_revoice|polish_export|transcribe)\.py"],
+                       capture_output=True)
+    except Exception:
+        pass
 # Allow the Chrome extension (chrome-extension://) to hand recordings straight in.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 

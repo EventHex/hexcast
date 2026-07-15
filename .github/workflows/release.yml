@@ -1,10 +1,10 @@
 # Build HexCast for macOS + Windows and publish a GitHub Release.
 # Trigger: push a tag like v0.2.0  ->  git tag v0.2.0 && git push origin v0.2.0
 #
-# The macOS job reuses desktop/build-dmg.sh (verified locally). The Windows job
-# is a starter — PyInstaller on Windows uses a .ico icon and no .app bundle;
-# expect a round or two of "add missing hiddenimport" on the runner, exactly
-# like the first mac build. WebView2 runtime ships on Win10/11 for pywebview.
+# Both jobs drive the same cross-platform desktop/hexcast.spec (mac reuses
+# build-dmg.sh, which calls the spec; Windows calls pyinstaller hexcast.spec
+# directly). The spec bundles the WebView2 (edgechromium/winforms) backend and
+# a .ico on Windows. The WebView2 runtime ships on Win10/11 for pywebview.
 name: release
 
 on:
@@ -47,7 +47,7 @@ jobs:
       - name: Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pywebview
+          pip install pyinstaller "pywebview>=5.0" "pythonnet>=3.0"
           pip install -r requirements.txt
       - name: Fetch ffmpeg
         shell: bash
@@ -55,22 +55,15 @@ jobs:
           mkdir -p desktop/bin
           curl -L -o ff.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
           unzip -q ff.zip -d ff && cp ff/*/bin/ffmpeg.exe desktop/bin/ffmpeg.exe
-      - name: Build (PyInstaller, onedir)
-        shell: bash
+      - name: Build (PyInstaller via spec)
         working-directory: desktop
-        run: |
-          pyinstaller --noconfirm --name HexCast --windowed \
-            --icon ../HexCast/"icon only logo.png" \
-            --add-data "../app.py;." --add-data "../auth.py;." \
-            --add-data "../brands.py;." --add-data "../recording.py;." \
-            --add-data "../providers;providers" --add-data "../tools;tools" \
-            --add-data "../pipeline;pipeline" --add-data "../editor/dist;editor/dist" \
-            --add-data "../assets;assets" --add-binary "bin/ffmpeg.exe;bin" \
-            --hidden-import app --hidden-import auth --hidden-import brands \
-            --hidden-import recording --hidden-import config --hidden-import webview \
-            --hidden-import webview.platforms.edgechromium \
-            launcher.py
-          cd dist && 7z a HexCast-Windows.zip HexCast
+        # hexcast.spec is cross-platform: on Windows it bundles the WebView2
+        # (edgechromium/winforms) backend, the .ico, and the desktop/bin ffmpeg.
+        run: pyinstaller --noconfirm hexcast.spec
+      - name: Zip onedir -> HexCast-Windows.zip
+        shell: bash
+        working-directory: desktop/dist
+        run: 7z a HexCast-Windows.zip HexCast
       - uses: softprops/action-gh-release@v2
         with:
           files: desktop/dist/HexCast-Windows.zip
