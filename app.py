@@ -1151,8 +1151,10 @@ def check_update(force: bool = False):
     m = _UPD["data"] or {}
     latest = m.get("version")
     available = bool(latest) and _semver(latest) > _semver(VERSION)
+    # platform-correct installer: Windows users must be sent the .zip, not the .dmg
+    dl = (m.get("win_url") if os.name == "nt" else m.get("mac_url")) or m.get("url")
     return {"current": VERSION, "latest": latest, "available": available,
-            "url": m.get("url"), "notes": m.get("notes")}
+            "url": dl, "notes": m.get("notes")}
 
 
 _SAMPLE_DIR = os.path.join(HERE, "assets", "sample")   # optional bundled starter project
