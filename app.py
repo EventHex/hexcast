@@ -66,7 +66,10 @@ def _with_keys(fn):
                 else:
                     os.environ[k] = v
 
-VERSION = "0.2.1"
+try:
+    VERSION = open(os.path.join(ROOT, "VERSION"), encoding="utf-8").read().strip()
+except OSError:
+    VERSION = "0.0.0"
 _EXT_SEEN = {"at": 0.0}   # last time the recorder extension pinged us
 
 app = FastAPI(title="HexCast")
@@ -299,11 +302,22 @@ def _central_detail(r) -> str:
         return "sign-in failed"
 
 
+def _central_auth(path: str, body: dict):
+    """Turn central-plane network failures into an actionable API response."""
+    try:
+        return _central(path, json=body)
+    except Exception:
+        raise HTTPException(
+            503,
+            "HexCast account service is unavailable. Check your internet connection and try again.",
+        ) from None
+
+
 @app.post("/api/auth/signup")
 def signup(body: dict = Body(...), response: Response = None):
     if CENTRAL:
-        r = _central("/auth/signup", json={"email": body.get("email"),
-                     "password": body.get("password"), "name": body.get("name")})
+        r = _central_auth("/auth/signup", {"email": body.get("email"),
+                          "password": body.get("password"), "name": body.get("name")})
         if r.status_code != 200:
             raise HTTPException(r.status_code, _central_detail(r))
         d = r.json()
@@ -327,7 +341,7 @@ def signup(body: dict = Body(...), response: Response = None):
 @app.post("/api/auth/login")
 def login(body: dict = Body(...), response: Response = None):
     if CENTRAL:
-        r = _central("/auth/login", json={"email": body.get("email"), "password": body.get("password")})
+        r = _central_auth("/auth/login", {"email": body.get("email"), "password": body.get("password")})
         if r.status_code != 200:
             raise HTTPException(r.status_code, _central_detail(r))
         d = r.json()

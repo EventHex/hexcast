@@ -20,15 +20,17 @@ command -v ffmpeg >/dev/null || echo "!! ffmpeg not on PATH — the app won't re
 
 echo "==> ScreenCaptureKit recorder (Swift)"
 if xcrun --find swiftc >/dev/null 2>&1; then
+  mkdir -p bin
   xcrun swiftc -O -target arm64-apple-macos14.0 \
     -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia \
     -framework CoreGraphics -framework AppKit \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker recorder/Info.plist \
     recorder/HexCastRecorder.swift -o bin/hexcast-recorder \
     && echo "   built bin/hexcast-recorder" \
-    || echo "!! swiftc failed — window recording falls back to whole-screen ffmpeg"
+    || { echo "BUILD FAILED: swiftc could not build bin/hexcast-recorder"; exit 1; }
 else
-  echo "!! swiftc not found — window recording falls back to whole-screen ffmpeg"
+  echo "BUILD FAILED: swiftc not found"
+  exit 1
 fi
 
 echo "==> PyInstaller"

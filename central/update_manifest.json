@@ -1,7 +1,7 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.6",
   "url": "https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg",
   "mac_url": "https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg",
   "win_url": "https://github.com/EventHex/hexcast/releases/latest/download/HexCast-Windows.zip",
-  "notes": "Manual check-for-update button in Settings."
+  "notes": "Windows startup and login reliability fixes, actionable service errors, and release smoke checks."
 }

@@ -42,7 +42,7 @@ from users' machines with no GCP credentials). It prints the URL and hits
 Bump the desktop version on a new release without redeploying code:
 ```bash
 gcloud run services update hexcast-central --region asia-south1 \
-  --update-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/HexCast.dmg
+  --update-env-vars UPDATE_VERSION=X.Y.Z,UPDATE_URL=https://…/HexCast.dmg
 ```
 
 `SECRET_KEY` is delivered from **Secret Manager** (`hexcast-secret`), not a
