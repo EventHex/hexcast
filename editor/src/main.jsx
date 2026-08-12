@@ -13,13 +13,29 @@ if (_theme) document.documentElement.setAttribute("data-theme", _theme);
 function Root() {
   const [me, setMe] = useState(undefined);   // undefined=checking, null=logged out, {}=user
   const [google, setGoogle] = useState(false);
-  useEffect(() => {
-    fetch("/api/auth/me").then((r) => r.json())
+  const [serviceError, setServiceError] = useState("");
+  const checkService = () => {
+    setMe(undefined);
+    setServiceError("");
+    if (location.protocol === "file:") {
+      setMe(null);
+      setServiceError("Open HexCast.exe instead of this HTML file. The editor needs HexCast's local service.");
+      return;
+    }
+    fetch("/api/auth/me").then((r) => {
+      if (!r.ok) throw new Error(`local service returned ${r.status}`);
+      return r.json();
+    })
       .then((d) => { setMe(d.user); setGoogle(!!d.google); })
-      .catch(() => setMe(null));
-  }, []);
+      .catch(() => {
+        setMe(null);
+        setServiceError("HexCast's local service is not running. Reopen HexCast.exe and keep HexCast running.");
+      });
+  };
+  useEffect(checkService, []);
   if (me === undefined) return <div className="boot">Loading…</div>;
-  if (!me) return <AuthPage google={google} onAuthed={setMe} />;
+  if (!me) return <AuthPage google={google} onAuthed={setMe}
+                            serviceError={serviceError} onRetry={checkService} />;
   return <App user={me} onLogout={() => setMe(null)} />;
 }
 

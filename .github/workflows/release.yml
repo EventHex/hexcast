@@ -1,5 +1,5 @@
 # Build HexCast for macOS + Windows and publish a GitHub Release.
-# Trigger: push a tag like v0.2.0  ->  git tag v0.2.0 && git push origin v0.2.0
+# Trigger: push the tag that matches VERSION.
 #
 # Both jobs drive the same cross-platform desktop/hexcast.spec (mac reuses
 # build-dmg.sh, which calls the spec; Windows calls pyinstaller hexcast.spec
@@ -15,7 +15,21 @@ permissions:
   contents: write   # create the Release
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches VERSION
+        shell: bash
+        run: |
+          expected="v$(tr -d '[:space:]' < VERSION)"
+          test "${GITHUB_REF_NAME}" = "$expected" || {
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION $expected"
+            exit 1
+          }
+
   mac:
+    needs: version
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -29,12 +43,20 @@ jobs:
         run: cd editor && npm ci && npm run build
       - name: Build DMG
         run: cd desktop && PYTHON=python3.12 ./build-dmg.sh
+      - name: Verify packaged version and recorder
+        shell: bash
+        run: |
+          expected="$(tr -d '[:space:]' < VERSION)"
+          actual="$(defaults read "$PWD/desktop/dist/HexCast.app/Contents/Info" CFBundleShortVersionString)"
+          test "$actual" = "$expected"
+          test -x desktop/dist/HexCast.app/Contents/Frameworks/bin/hexcast-recorder
       - uses: softprops/action-gh-release@v2
         with:
           files: desktop/dist/HexCast.dmg
           fail_on_unmatched_files: true
 
   windows:
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +82,32 @@ jobs:
         # hexcast.spec is cross-platform: on Windows it bundles the WebView2
         # (edgechromium/winforms) backend, the .ico, and the desktop/bin ffmpeg.
         run: pyinstaller --noconfirm hexcast.spec
+      - name: Smoke-test packaged local service
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $env:PORT = "8877"
+          $env:HEXCAST_DATA_DIR = "$env:RUNNER_TEMP\hexcast-smoke"
+          $app = Start-Process -FilePath ".\dist\HexCast\HexCast.exe" -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:8877/api/health" -TimeoutSec 1
+                if ($health.version) { $ready = $true; break }
+              } catch {
+                Start-Sleep -Milliseconds 500
+              }
+            }
+            if (-not $ready) { throw "Packaged HexCast local service did not start" }
+            $expected = (Get-Content "..\VERSION" -Raw).Trim()
+            if ($health.version -ne $expected) {
+              throw "Packaged version $($health.version) does not match VERSION $expected"
+            }
+            Write-Host "HexCast health check passed (version $($health.version))"
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: Zip onedir -> HexCast-Windows.zip
         shell: bash
         working-directory: desktop/dist

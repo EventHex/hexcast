@@ -3,7 +3,7 @@ import logoStack from "../assets/logo-stack.png";
 
 // Sign-in / sign-up gate. Shown until /api/auth/me returns a user. On success
 // the session cookie is set by the server and onAuthed(user) swaps in the app.
-export function AuthPage({ onAuthed, google }) {
+export function AuthPage({ onAuthed, google, serviceError = "", onRetry }) {
   const [mode, setMode] = useState("login");   // login | signup
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -11,6 +11,22 @@ export function AuthPage({ onAuthed, google }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const signup = mode === "signup";
+
+  if (serviceError) {
+    return (
+      <div className="authwrap">
+        <div className="authcard">
+          <img className="authbrand-logo" src={logoStack} alt="HexCast" />
+          <h3 style={{ textAlign: "center" }}>HexCast needs to be reopened</h3>
+          <p className="autherr">{serviceError}</p>
+          <button className="btn wide" type="button" onClick={onRetry}>Try again</button>
+          <p className="hint" style={{ textAlign: "center", marginTop: 12 }}>
+            If a browser window opened, HexCast must still be running in the background.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const submit = async (e) => {
     e.preventDefault();
@@ -23,7 +39,12 @@ export function AuthPage({ onAuthed, google }) {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.detail || "Something went wrong");
       onAuthed(signup ? j : j);
-    } catch (e2) { setErr(String(e2.message || e2)); }
+    } catch (e2) {
+      const msg = String(e2.message || e2);
+      setErr(/failed to fetch|networkerror/i.test(msg)
+        ? "HexCast's local service stopped. Reopen HexCast.exe and try again."
+        : msg);
+    }
     setBusy(false);
   };
 

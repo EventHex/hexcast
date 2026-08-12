@@ -141,7 +141,7 @@
         Download for Windows
       </a>
     </div>
-    <p class="meta" id="meta">macOS 12+ · Apple Silicon &amp; Intel · free, bring your own keys</p>
+    <p class="meta" id="meta">macOS 12+ · Apple Silicon · free, bring your own keys</p>
     <p class="note" id="note"></p>
 
     <div class="shot" aria-hidden="true">
@@ -216,8 +216,12 @@
 </footer>
 
 <script>
+  var fallbackMac="https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg";
+  var fallbackWin="https://github.com/EventHex/hexcast/releases/latest/download/HexCast-Windows.zip";
+  ["mac","mac2"].forEach(function(id){document.getElementById(id).href=fallbackMac});
+  ["win","win2"].forEach(function(id){document.getElementById(id).href=fallbackWin});
   fetch("/updates/latest").then(r=>r.json()).then(function(m){
-    var v=m.version, macUrl=m.mac_url||m.url, winUrl=m.win_url;
+    var v=m.version, macUrl=m.mac_url||m.url||fallbackMac, winUrl=m.win_url||fallbackWin;
     var isWin=/Windows/.test(navigator.userAgent);
     function wire(id, url, isDl){
       var el=document.getElementById(id); if(!el) return;
@@ -226,7 +230,7 @@
     ["mac","mac2"].forEach(function(id){wire(id,macUrl)});
     ["win","win2"].forEach(function(id){wire(id,winUrl,true)});
     var meta=document.getElementById("meta"), note=document.getElementById("note"), ver=document.getElementById("ver");
-    if(v){ meta.innerHTML="Version <b>"+v+"</b> · "+(isWin?"Windows 10/11":"macOS 12+ · Apple Silicon &amp; Intel")+" · free, bring your own keys";
+    if(v){ meta.innerHTML="Version <b>"+v+"</b> · "+(isWin?"Windows 10/11":"macOS 12+ · Apple Silicon")+" · free, bring your own keys";
            ver.textContent="v"+v; }
     if(!winUrl){ note.textContent="Windows build coming soon — Mac is ready now."; }
     // put the platform you're on first

@@ -38,6 +38,7 @@ datas = [
     (os.path.join(ROOT, "auth.py"), "."),
     (os.path.join(ROOT, "brands.py"), "."),
     (os.path.join(ROOT, "recording.py"), "."),
+    (os.path.join(ROOT, "VERSION"), "."),
     (os.path.join(ROOT, "providers"), "providers"),
     (os.path.join(ROOT, "tools"), "tools"),
     (os.path.join(ROOT, "pipeline"), "pipeline"),
@@ -80,14 +81,18 @@ excludes = ["torch", "faster_whisper", "ctranslate2", "tkinter", "matplotlib", "
 a = Analysis(["launcher.py"], pathex=[ROOT], binaries=_ffbins, datas=datas,
              hiddenimports=hiddenimports, excludes=excludes, noarchive=False)
 pyz = PYZ(a.pure)
-# console=True keeps a terminal so boot errors are visible while stabilising the
-# Windows build; flip to False once native window is confirmed working.
+# Keep the console subsystem for pipeline subprocess stdout/stderr. On Windows
+# the bootloader hides only a launcher-owned console; terminal diagnostics stay
+# visible and redirected pipeline output keeps working.
 _icon = "hexcast.ico" if IS_WIN else "hexcast.icns"
+_console_visibility = {"hide_console": "hide-early"} if IS_WIN else {}
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="HexCast",
-          console=True, disable_windowed_traceback=False, icon=_icon)
+          console=True, disable_windowed_traceback=False, icon=_icon,
+          **_console_visibility)
 coll = COLLECT(exe, a.binaries, a.datas, name="HexCast")
 
 # macOS .app wrapper (mac-only; on Windows COLLECT already produced dist/HexCast/HexCast.exe)
 if IS_MAC:
     app = BUNDLE(coll, name="HexCast.app", icon="hexcast.icns", bundle_identifier="ai.eventhex.hexcast",
-                 info_plist={"CFBundleShortVersionString": "0.2.5", "NSHighResolutionCapable": True})
+                 info_plist={"CFBundleShortVersionString": open(os.path.join(ROOT, "VERSION")).read().strip(),
+                             "NSHighResolutionCapable": True})

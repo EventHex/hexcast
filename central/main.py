@@ -68,7 +68,7 @@ def latest_update():
     """Release manifest the desktop app polls for auto-update. Set per release
     with env vars on the service (no redeploy needed):
         gcloud run services update hexcast-central \\
-          --set-env-vars UPDATE_VERSION=0.2.0,UPDATE_URL=https://…/HexCast.dmg
+          --set-env-vars UPDATE_VERSION=X.Y.Z,UPDATE_URL=https://…/HexCast.dmg
     Falls back to central/update_manifest.json for local runs."""
     v = os.environ.get("UPDATE_VERSION")
     if v:

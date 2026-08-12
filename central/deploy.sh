@@ -14,6 +14,7 @@ cd "$(dirname "$0")"
 PROJECT="${PROJECT:-speech-to-text-app-448611}"
 REGION="${REGION:-asia-south1}"
 SERVICE="${SERVICE:-hexcast-central}"
+VERSION="$(tr -d '[:space:]' < ../VERSION)"
 
 PNUM="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 SA="${PNUM}-compute@developer.gserviceaccount.com"
@@ -46,7 +47,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --memory 512Mi \
-  --set-env-vars "HEXCAST_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=0.2.1,MAC_URL=${MAC_URL:-https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg},WIN_URL=${WIN_URL:-https://github.com/EventHex/hexcast/releases/latest/download/HexCast-Windows.zip}" \
+  --set-env-vars "HEXCAST_BACKEND=firestore,ALLOW_ORIGINS=*,UPDATE_VERSION=${VERSION},MAC_URL=${MAC_URL:-https://github.com/EventHex/hexcast/releases/latest/download/HexCast.dmg},WIN_URL=${WIN_URL:-https://github.com/EventHex/hexcast/releases/latest/download/HexCast-Windows.zip},UPDATE_NOTES=Windows startup and login reliability fixes" \
   --set-secrets "SECRET_KEY=hexcast-secret:latest" \
   --project "$PROJECT"
 
